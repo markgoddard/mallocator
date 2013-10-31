@@ -1,9 +1,11 @@
 #include "mallocator_hs.h"
+#include "mallocator_monkey.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 static void print_mallocator_stats_fn(void *arg, mallocator_hs_t *mallocator)
 {
@@ -26,7 +28,7 @@ static void print_mallocator_stats(mallocator_hs_t *mallocator)
     print_mallocator_stats_fn((uintptr_t) 0, mallocator);
 }
 
-int main(int argc, char *argv[])
+static void test_mallocator_hs(void)
 {
     mallocator_hs_t *root_hs = mallocator_hs_create("root");
     mallocator_t *root = mallocator_hs_mallocator(root_hs);
@@ -73,5 +75,63 @@ int main(int argc, char *argv[])
     mallocator_dereference(grandchild);
 
     printf(".");
+}
+
+static void test_mallocator_monkey_random(void)
+{
+    srand(time(NULL));
+    mallocator_monkey_t *mallocator_impl = mallocator_monkey_create_random("example", 0.1, 0.1);
+    mallocator_t *mallocator = mallocator_monkey_mallocator(mallocator_impl);
+    for (unsigned i = 0; ; i++)
+    {
+	void *ptr = mallocator_malloc(mallocator, 1);
+	if (!ptr)
+	{
+	    printf("Failure after %u successes\n", i);
+	    break;
+	}
+	else
+	{
+	    mallocator_free(mallocator, ptr, 1);
+	}
+    }
+    for (unsigned i = 0; ; i++)
+    {
+	void *ptr = mallocator_malloc(mallocator, 1);
+	if (ptr)
+	{
+	    printf("Success after %u failures\n", i);
+	    mallocator_free(mallocator, ptr, 1);
+	    break;
+	}
+    }
+    printf(".");
+}
+
+static void test_mallocator_monkey_step(void)
+{
+    mallocator_monkey_t *mallocator_impl = mallocator_monkey_create_step("example", 20, 10, true);
+    mallocator_t *mallocator = mallocator_monkey_mallocator(mallocator_impl);
+    for (unsigned i = 0; i < 2; i++)
+    {
+	for (unsigned j = 0; j < 20; j++)
+	{
+	    void *ptr = mallocator_malloc(mallocator, 1);
+	    assert(ptr);
+	    mallocator_free(mallocator, ptr, 1);
+	}
+	for (unsigned j = 0; j < 10; j++)
+	{
+	    assert(!mallocator_malloc(mallocator, 1));
+	}
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    test_mallocator_hs();
+    test_mallocator_monkey_random();
+    test_mallocator_monkey_step();
+    printf("\n");
     return 0;
 }

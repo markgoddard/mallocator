@@ -7,39 +7,35 @@
 #include <assert.h>
 #include <pthread.h>
 
+typedef struct
+{
+    float p_failure;	/* Probability of failure (0-1) */
+    float p_recovery;	/* Probability of recovery during failure (0-1) */
+    bool failing;
+} mallocator_monkey_random_t;
+
+typedef struct
+{
+    unsigned num_success;   /* Number of successful allocations before a failure */
+    unsigned num_failure;   /* Number of unsuccessful allocations (0 for infinite) */
+    bool repeat;	    /* Whether to repeat the sequence after the final failure */
+    unsigned count;
+    bool failing;
+    bool failed;
+} mallocator_monkey_step_t;
+
 struct mallocator_monkey
 {
     mallocator_t mallocator;
     pthread_mutex_t lock;	    /* Protects ref_count */
     unsigned ref_count;
     const char *name;
-    enum { CHAOS_RANDOM, CHAOS_STEP } type;
-    mallocator_monkey_fn fn;
+    mallocator_monkey_fail_fn fn;
     void *arg;
     union
     {
-	struct
-	{
-	    float p_failure;	/* Probability of failure (0-1) */
-	    float p_recovery;	/* Probability of recovery during failure (0-1) */
-	} random;
-
-	typedef struct
-	{
-	    unsigned num_success;   /* Number of successful allocations before a failure */
-	    unsigned num_failure;   /* Number of unsuccessful allocations (0 for infinite) */
-	    bool repeat;	    /* Whether to repeat the sequence after the final failure */
-	    unsigned count;
-	    bool active;
-	} mallocator_monkey_step_t;
-
 	mallocator_monkey_random_t random;
-
-	struct
-	{
-	    mallocator_monkey_step_t step;
-	    unsigned count;
-	} step;
+	mallocator_monkey_step_t step;
     } chaos;
 };
 
@@ -171,47 +167,48 @@ static const char *mallocator_monkey_name(void *obj)
     return mallocator->name;
 }
 
-static bool mallocator_monkey_cause_random_chaos(void *arg)
+static bool mallocator_monkey_fail_random(void *arg)
 {
     mallocator_monkey_random_t *random = arg;
-    int r = rand_r(&random->seed);
+    double p = rand() / (float)RAND_MAX;
     if (random->failing)
     {
-	if (r > random->random.p_recovery)
+	if (p < random->p_recovery)
 	    random->failing = false;
     }
     else
     {
-	if (r > random->random.p_failure)
+	if (p < random->p_failure)
 	    random->failing = true;
     }
     return random->failing;
 }
 
-static bool mallocator_monkey_cause_step_chaos(void *arg)
+static bool mallocator_monkey_fail_step(void *arg)
 {
     mallocator_monkey_step_t *step = arg;
+    step->count++;
     if (step->failing)
     {
-	if (step->count >= step->num_successful)
+	if (step->count > step->num_failure)
 	{
 	    step->failing = false;
-	    step->count = 0;
+	    step->count = 1;
 	}
     }
-    else
+    else if (!step->failed || step->repeat)
     {
-	if (step->count >= step->num_failures)
+	if (step->count > step->num_success)
 	{
 	    step->failing = true;
-	    step->count = 0;
+	    step->failed = true;
+	    step->count = 1;
 	}
     }
-    step->count++;
     return step->failing;
 }
 
-static inline bool mallocator_monkey_cause_chaos(mallocator_monkey_t *mallocator)
+static inline bool mallocator_monkey_fail(mallocator_monkey_t *mallocator)
 {
     return mallocator->fn(mallocator->arg);
 }
@@ -219,7 +216,7 @@ static inline bool mallocator_monkey_cause_chaos(mallocator_monkey_t *mallocator
 static void *mallocator_monkey_malloc(void *obj, size_t size)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
-    if (mallocator_monkey_cause_chaos(mallocator))
+    if (mallocator_monkey_fail(mallocator))
 	return NULL;
 
     return malloc(size);
@@ -228,7 +225,7 @@ static void *mallocator_monkey_malloc(void *obj, size_t size)
 static void *mallocator_monkey_calloc(void *obj, size_t nmemb, size_t size)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
-    if (mallocator_monkey_cause_chaos(mallocator))
+    if (mallocator_monkey_fail(mallocator))
 	return NULL;
 
     return calloc(nmemb, size);
@@ -237,7 +234,7 @@ static void *mallocator_monkey_calloc(void *obj, size_t nmemb, size_t size)
 static void *mallocator_monkey_realloc(void *obj, void *ptr, size_t size, size_t new_size)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
-    if (mallocator_monkey_cause_chaos(mallocator))
+    if (mallocator_monkey_fail(mallocator))
 	return NULL;
 
     return realloc(ptr, new_size);
@@ -252,10 +249,39 @@ static void mallocator_monkey_free(void *obj, void *ptr, size_t size)
 /**************************************************************************************************/
 /* Public interface */
 
-mallocator_monkey_t *mallocator_monkey_create(const char *name)
+mallocator_monkey_t *mallocator_monkey_create_random(const char *name, float p_failure, float p_recovery)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int(name);
     if (!mallocator) return NULL;
+    mallocator->chaos.random.p_failure = p_failure;
+    mallocator->chaos.random.p_recovery = p_recovery;
+    mallocator->chaos.random.failing = false;
+    mallocator->fn = mallocator_monkey_fail_random;
+    mallocator->arg = &mallocator->chaos.random;
+    return mallocator;
+}
+
+mallocator_monkey_t *mallocator_monkey_create_step(const char *name, unsigned num_success, unsigned num_failure, bool repeat)
+{
+    mallocator_monkey_t *mallocator = mallocator_monkey_create_int(name);
+    if (!mallocator) return NULL;
+    mallocator->chaos.step.num_success = num_success;
+    mallocator->chaos.step.num_failure = num_failure;
+    mallocator->chaos.step.repeat = repeat;
+    mallocator->chaos.step.count = 0;
+    mallocator->chaos.step.failing = false;
+    mallocator->chaos.step.failed = false;
+    mallocator->fn = mallocator_monkey_fail_step;
+    mallocator->arg = &mallocator->chaos.step;
+    return mallocator;
+}
+
+mallocator_monkey_t *mallocator_monkey_create_custom(const char *name, mallocator_monkey_fail_fn fn, void *arg)
+{
+    mallocator_monkey_t *mallocator = mallocator_monkey_create_int(name);
+    if (!mallocator) return NULL;
+    mallocator->fn = fn;
+    mallocator->arg = arg;
     return mallocator;
 }
 
