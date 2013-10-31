@@ -1,3 +1,6 @@
+#define  _POSIX_C_SOURCE 200809L
+
+#include "mallocator_std.h"
 #include "mallocator_hs.h"
 #include "mallocator_monkey.h"
 
@@ -6,6 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 static void print_mallocator_stats_fn(void *arg, mallocator_hs_t *mallocator)
 {
@@ -125,6 +129,68 @@ static void test_mallocator_monkey_step(void)
 	    assert(!mallocator_malloc(mallocator, 1));
 	}
     }
+    mallocator_dereference(mallocator);
+}
+
+static struct timespec time_diff(struct timespec a, struct timespec b)
+{
+    struct timespec diff;
+    diff.tv_sec = a.tv_sec - b.tv_sec;
+    if (a.tv_nsec > b.tv_nsec)
+    {
+	diff.tv_nsec = a.tv_nsec - b.tv_nsec;
+    }
+    else
+    {
+	diff.tv_nsec = 1000000000L + a.tv_nsec - b.tv_nsec;
+	diff.tv_sec--;
+    }
+    return diff;
+}
+
+static void test_mallocator_performance(void)
+{
+    struct timespec start, end, t_malloc, t_mallocator, t_mallocator_hs;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (unsigned i = 0; i < 1000000; i++)
+    {
+	void *ptr = malloc(256);
+	assert(ptr);
+	free(ptr);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    t_malloc = time_diff(end, start);
+
+    mallocator_std_t *mallocator_std = mallocator_std_create("performance");
+    mallocator_t *mallocator = mallocator_std_mallocator(mallocator_std);
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (unsigned i = 0; i < 1000000; i++)
+    {
+	void *ptr = mallocator_malloc(mallocator, 256);
+	assert(ptr);
+	mallocator_free(mallocator, ptr, 256);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    mallocator_dereference(mallocator);
+    t_mallocator = time_diff(end, start);
+
+    mallocator_hs_t *mallocator_hs = mallocator_hs_create("performance");
+    mallocator = mallocator_hs_mallocator(mallocator_hs);
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (unsigned i = 0; i < 1000000; i++)
+    {
+	void *ptr = mallocator_malloc(mallocator, 256);
+	assert(ptr);
+	mallocator_free(mallocator, ptr, 256);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    mallocator_dereference(mallocator);
+    t_mallocator_hs = time_diff(end, start);
+
+    printf("malloc %d.%09lds\n", (int)t_malloc.tv_sec, (long int)t_malloc.tv_nsec);
+    printf("mallocator_std %d.%09lds\n", (int)t_mallocator.tv_sec, (long int)t_mallocator.tv_nsec);
+    printf("mallocator_hs %d.%09lds\n", (int)t_mallocator_hs.tv_sec, (long int)t_mallocator_hs.tv_nsec);
 }
 
 int main(int argc, char *argv[])
@@ -132,6 +198,7 @@ int main(int argc, char *argv[])
     test_mallocator_hs();
     test_mallocator_monkey_random();
     test_mallocator_monkey_step();
+    test_mallocator_performance();
     printf("\n");
     return 0;
 }
