@@ -11,7 +11,7 @@ typedef struct
 {
     float p_failure;	/* Probability of failure (0-1) */
     float p_recovery;	/* Probability of recovery during failure (0-1) */
-    bool failing;
+    bool failing;	/* Protected by lock */
 } mallocator_monkey_random_t;
 
 typedef struct
@@ -19,16 +19,16 @@ typedef struct
     unsigned num_success;   /* Number of successful allocations before a failure */
     unsigned num_failure;   /* Number of unsuccessful allocations (0 for infinite) */
     bool repeat;	    /* Whether to repeat the sequence after the final failure */
-    unsigned count;
-    bool failing;
-    bool failed;
+    unsigned count;	    /* Protected by lock */
+    bool failing;	    /* Protected by lock */
+    bool failed;	    /* Protected by lock */
 } mallocator_monkey_step_t;
 
 struct mallocator_monkey
 {
     mallocator_t mallocator;
-    pthread_mutex_t lock;	    /* Protects ref_count */
-    unsigned ref_count;
+    pthread_mutex_t lock;
+    unsigned ref_count;	    /* Protected by lock */
     const char *name;
     mallocator_monkey_fail_fn fn;
     void *arg;
@@ -210,7 +210,10 @@ static bool mallocator_monkey_fail_step(void *arg)
 
 static inline bool mallocator_monkey_fail(mallocator_monkey_t *mallocator)
 {
-    return mallocator->fn(mallocator->arg);
+    mallocator_monkey_lock(mallocator);
+    const bool fail = mallocator->fn(mallocator->arg);
+    mallocator_monkey_unlock(mallocator);
+    return fail;
 }
 
 static void *mallocator_monkey_malloc(void *obj, size_t size)
@@ -242,7 +245,7 @@ static void *mallocator_monkey_realloc(void *obj, void *ptr, size_t size, size_t
 
 static void mallocator_monkey_free(void *obj, void *ptr, size_t size)
 {
-    mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
+    (void) mallocator_monkey_verify(obj);
     free(ptr);
 }
 

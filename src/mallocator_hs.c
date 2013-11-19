@@ -339,14 +339,31 @@ void mallocator_hs_stats(mallocator_hs_t *mallocator, mallocator_hs_stats_t *sta
     mallocator_hs_unlock(mallocator);
 }
 
-void mallocator_hs_iterate(mallocator_hs_t *mallocator, mallocator_hs_iter_fn fn, void *arg)
+mallocator_hs_t *mallocator_hs_child_begin(mallocator_hs_t *mallocator)
 {
     mallocator_hs_lock(mallocator);
-    for (mallocator_hs_t *child = mallocator->children;
+    mallocator_hs_t *child = mallocator->children;
+    if (child) mallocator_reference(&child->mallocator);
+    mallocator_hs_unlock(mallocator);
+    return child;
+}
+
+mallocator_hs_t *mallocator_hs_child_next(mallocator_hs_t *mallocator)
+{
+    mallocator_hs_lock(mallocator);
+    mallocator_hs_t *next = mallocator->next_child;
+    if (next) mallocator_reference(&next->mallocator);
+    mallocator_hs_unlock(mallocator);
+    mallocator_dereference(&mallocator->mallocator);
+    return next;
+}
+
+void mallocator_hs_iterate(mallocator_hs_t *mallocator, mallocator_hs_iter_fn fn, void *arg)
+{
+    for (mallocator_hs_t *child = mallocator_hs_child_begin(mallocator);
 	 child != NULL;
-	 child = child->next_child)
+	 child = mallocator_hs_child_next(child))
     {
 	fn(arg, child);
     }
-    mallocator_hs_unlock(mallocator);
 }

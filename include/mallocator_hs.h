@@ -28,6 +28,10 @@ mallocator_hs_t *mallocator_hs_create_custom(const char *name, mallocator_t *imp
 
 mallocator_t *mallocator_hs_mallocator(mallocator_hs_t *mallocator);
 
+mallocator_hs_t *mallocator_hs_child_begin(mallocator_hs_t *mallocator);
+
+mallocator_hs_t *mallocator_hs_child_next(mallocator_hs_t *mallocator);
+
 typedef void (*mallocator_hs_iter_fn)(void *arg, mallocator_hs_t *mallocator);
 
 void mallocator_hs_iterate(mallocator_hs_t *mallocator, mallocator_hs_iter_fn fn, void *arg);

@@ -141,25 +141,25 @@ static const char *mallocator_std_name(void *obj)
 
 static void *mallocator_std_malloc(void *obj, size_t size)
 {
-    mallocator_std_t *mallocator = mallocator_std_verify(obj);
+    (void) mallocator_std_verify(obj);
     return malloc(size);
 }
 
 static void *mallocator_std_calloc(void *obj, size_t nmemb, size_t size)
 {
-    mallocator_std_t *mallocator = mallocator_std_verify(obj);
+    (void) mallocator_std_verify(obj);
     return calloc(nmemb, size);
 }
 
 static void *mallocator_std_realloc(void *obj, void *ptr, size_t size, size_t new_size)
 {
-    mallocator_std_t *mallocator = mallocator_std_verify(obj);
+    (void) mallocator_std_verify(obj);
     return realloc(ptr, new_size);
 }
 
 static void mallocator_std_free(void *obj, void *ptr, size_t size)
 {
-    mallocator_std_t *mallocator = mallocator_std_verify(obj);
+    (void) mallocator_std_verify(obj);
     free(ptr);
 }
 
