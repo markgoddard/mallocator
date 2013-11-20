@@ -3,6 +3,8 @@
 #include "mallocator_std.h"
 #include "mallocator_hs.h"
 #include "mallocator_monkey.h"
+#include "default_mallocator.h"
+#include "module_mallocator.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -10,6 +12,36 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+static void test_default_mallocator(void)
+{
+    mallocator_std_t *std = mallocator_std_create("default");
+    mallocator_t *mallocator = mallocator_std_mallocator(std);
+    assert(!default_mallocator());
+    default_mallocator_init(mallocator);
+    mallocator_dereference(mallocator);
+    assert(default_mallocator());
+    void *ptr = default_mallocator_malloc(42);
+    assert(ptr);
+    default_mallocator_free(ptr, 42);
+    default_mallocator_fini();
+    assert(!default_mallocator());
+}
+
+static void test_module_mallocator(void)
+{
+    mallocator_std_t *std = mallocator_std_create("module");
+    mallocator_t *mallocator = mallocator_std_mallocator(std);
+    assert(!module_mallocator());
+    module_mallocator_init(mallocator);
+    mallocator_dereference(mallocator);
+    assert(module_mallocator());
+    void *ptr = module_mallocator_malloc(42);
+    assert(ptr);
+    module_mallocator_free(ptr, 42);
+    module_mallocator_fini();
+    assert(!module_mallocator());
+}
 
 static void print_mallocator_stats_fn(void *arg, mallocator_hs_t *mallocator)
 {
@@ -195,6 +227,8 @@ static void test_mallocator_performance(void)
 
 int main(int argc, char *argv[])
 {
+    test_default_mallocator();
+    test_module_mallocator();
     test_mallocator_hs();
     test_mallocator_monkey_random();
     test_mallocator_monkey_step();

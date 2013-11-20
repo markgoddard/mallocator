@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
+#include <string.h>
 
 static void mallocator_hs_stats_init(mallocator_hs_stats_t *stats)
 {
@@ -332,13 +333,6 @@ mallocator_t *mallocator_hs_mallocator(mallocator_hs_t *mallocator)
     return &mallocator->mallocator;
 }
 
-void mallocator_hs_stats(mallocator_hs_t *mallocator, mallocator_hs_stats_t *stats)
-{
-    mallocator_hs_lock(mallocator);
-    *stats = mallocator->stats;
-    mallocator_hs_unlock(mallocator);
-}
-
 mallocator_hs_t *mallocator_hs_child_begin(mallocator_hs_t *mallocator)
 {
     mallocator_hs_lock(mallocator);
@@ -358,6 +352,19 @@ mallocator_hs_t *mallocator_hs_child_next(mallocator_hs_t *mallocator)
     return next;
 }
 
+mallocator_hs_t *mallocator_hs_child_lookup(mallocator_hs_t *mallocator, const char *name)
+{
+    for (mallocator_hs_t *child = mallocator_hs_child_begin(mallocator);
+	 child != NULL;
+	 child = mallocator_hs_child_next(child))
+    {
+	const int res = strcmp(child->name, name);
+	if (res == 0)
+	    return child;
+    }
+    return NULL;
+}
+
 void mallocator_hs_iterate(mallocator_hs_t *mallocator, mallocator_hs_iter_fn fn, void *arg)
 {
     for (mallocator_hs_t *child = mallocator_hs_child_begin(mallocator);
@@ -366,4 +373,11 @@ void mallocator_hs_iterate(mallocator_hs_t *mallocator, mallocator_hs_iter_fn fn
     {
 	fn(arg, child);
     }
+}
+
+void mallocator_hs_stats(mallocator_hs_t *mallocator, mallocator_hs_stats_t *stats)
+{
+    mallocator_hs_lock(mallocator);
+    *stats = mallocator->stats;
+    mallocator_hs_unlock(mallocator);
 }

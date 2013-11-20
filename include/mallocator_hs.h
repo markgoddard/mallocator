@@ -32,6 +32,8 @@ mallocator_hs_t *mallocator_hs_child_begin(mallocator_hs_t *mallocator);
 
 mallocator_hs_t *mallocator_hs_child_next(mallocator_hs_t *mallocator);
 
+mallocator_hs_t *mallocator_hs_child_lookup(mallocator_hs_t *mallocator, const char *name);
+
 typedef void (*mallocator_hs_iter_fn)(void *arg, mallocator_hs_t *mallocator);
 
 void mallocator_hs_iterate(mallocator_hs_t *mallocator, mallocator_hs_iter_fn fn, void *arg);
