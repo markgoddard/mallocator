@@ -1,7 +1,6 @@
 #define  _POSIX_C_SOURCE 200809L
 
-#include "mallocator_std.h"
-#include "mallocator_hs.h"
+#include "mallocator.h"
 #include "mallocator_monkey.h"
 #include "default_mallocator.h"
 #include "module_mallocator.h"
@@ -15,8 +14,7 @@
 
 static void test_default_mallocator(void)
 {
-    mallocator_std_t *std = mallocator_std_create("default");
-    mallocator_t *mallocator = mallocator_std_mallocator(std);
+    mallocator_t *mallocator = mallocator_create("default");
     assert(!default_mallocator());
     default_mallocator_init(mallocator);
     mallocator_dereference(mallocator);
@@ -26,12 +24,12 @@ static void test_default_mallocator(void)
     default_mallocator_free(ptr, 42);
     default_mallocator_fini();
     assert(!default_mallocator());
+    printf(".");
 }
 
 static void test_module_mallocator(void)
 {
-    mallocator_std_t *std = mallocator_std_create("module");
-    mallocator_t *mallocator = mallocator_std_mallocator(std);
+    mallocator_t *mallocator = mallocator_create("module");
     assert(!module_mallocator());
     module_mallocator_init(mallocator);
     mallocator_dereference(mallocator);
@@ -41,46 +39,46 @@ static void test_module_mallocator(void)
     module_mallocator_free(ptr, 42);
     module_mallocator_fini();
     assert(!module_mallocator());
+    printf(".");
 }
 
-static void print_mallocator_stats_fn(void *arg, mallocator_hs_t *mallocator)
+static void print_mallocator_stats_fn(void *arg, mallocator_t *mallocator)
 {
     unsigned indent = (uintptr_t) arg;
     char indent_buf[16];
     memset(indent_buf, ' ', indent * 2);
     indent_buf[indent * 2] = '\0';
 
-    mallocator_hs_stats_t stats;
-    mallocator_hs_stats(mallocator, &stats);
-    printf("%s%s:\n", indent_buf, mallocator_name(mallocator_hs_mallocator(mallocator)));
-    printf("%sallocated blocks/bytes: %zu/%zu\n", indent_buf, stats.blocks_allocated, stats.bytes_allocated);
-    printf("%sfreed     blocks/bytes: %zu/%zu\n", indent_buf, stats.blocks_freed, stats.bytes_freed);
-    printf("%sfailed    blocks/bytes: %zu/%zu\n", indent_buf, stats.blocks_failed, stats.bytes_failed);
-    mallocator_hs_iterate(mallocator, print_mallocator_stats_fn, (void *)(uintptr_t) (indent + 1));
+    mallocator_stats_t stats;
+    mallocator_stats(mallocator, &stats);
+    char name_buf[64];
+    printf("%s%s:\n", indent_buf, mallocator_full_name(mallocator, name_buf, sizeof(name_buf)));
+    printf("%sblocks allocated/freed/failed:\t%zu/%zu/%zu\n", indent_buf, stats.blocks_allocated, stats.blocks_freed, stats.blocks_failed);
+    printf("%sbytes  allocated/freed/failed:\t%zu/%zu/%zu\n", indent_buf, stats.bytes_allocated, stats.bytes_freed, stats.bytes_failed);
+    mallocator_iterate(mallocator, print_mallocator_stats_fn, (void *)(uintptr_t) (indent + 1));
 }
 
-static void print_mallocator_stats(mallocator_hs_t *mallocator)
+static void print_mallocator_stats(mallocator_t *mallocator)
 {
     print_mallocator_stats_fn((uintptr_t) 0, mallocator);
 }
 
-static void test_mallocator_hs(void)
+static void test_mallocator(void)
 {
-    mallocator_hs_t *root_hs = mallocator_hs_create("root");
-    mallocator_t *root = mallocator_hs_mallocator(root_hs);
+    mallocator_t *root = mallocator_create("root");
 
     for (unsigned i = 0; i < 42; i++)
     {
 	int *int_array = mallocator_malloc(root, 4 * sizeof(int));
-	mallocator_hs_stats_t stats;
-	mallocator_hs_stats(root_hs, &stats);
+	mallocator_stats_t stats;
+	mallocator_stats(root, &stats);
 	assert(stats.blocks_allocated == i + 1);
 	assert(stats.blocks_freed == i);
 	assert(stats.bytes_allocated == (i + 1) * 4 * sizeof(int));
 	assert(stats.bytes_freed == i * 4 * sizeof(int));
 
 	mallocator_free(root, int_array, 4 * sizeof(int));
-	mallocator_hs_stats(root_hs, &stats);
+	mallocator_stats(root, &stats);
 	assert(stats.blocks_allocated == i + 1);
 	assert(stats.blocks_freed == i + 1);
 	assert(stats.bytes_allocated == (i + 1) * 4 * sizeof(int));
@@ -106,7 +104,7 @@ static void test_mallocator_hs(void)
     int *int_array4 = mallocator_malloc(grandchild, 32 * sizeof(int));
     mallocator_free(grandchild, int_array4, 32 * sizeof(int));
 
-    print_mallocator_stats(root_hs);
+    print_mallocator_stats(root);
 
     mallocator_dereference(grandchild);
 
@@ -116,8 +114,9 @@ static void test_mallocator_hs(void)
 static void test_mallocator_monkey_random(void)
 {
     srand(time(NULL));
-    mallocator_monkey_t *mallocator_impl = mallocator_monkey_create_random("example", 0.1, 0.1);
-    mallocator_t *mallocator = mallocator_monkey_mallocator(mallocator_impl);
+    mallocator_monkey_t *monkey = mallocator_monkey_create_random(0.1, 0.1);
+    mallocator_impl_t *impl = mallocator_monkey_impl(monkey);
+    mallocator_t *mallocator = mallocator_create_custom("random", impl);
     for (unsigned i = 0; ; i++)
     {
 	void *ptr = mallocator_malloc(mallocator, 1);
@@ -141,13 +140,15 @@ static void test_mallocator_monkey_random(void)
 	    break;
 	}
     }
+    mallocator_dereference(mallocator);
     printf(".");
 }
 
 static void test_mallocator_monkey_step(void)
 {
-    mallocator_monkey_t *mallocator_impl = mallocator_monkey_create_step("example", 20, 10, true);
-    mallocator_t *mallocator = mallocator_monkey_mallocator(mallocator_impl);
+    mallocator_monkey_t *monkey = mallocator_monkey_create_step(20, 10, true);
+    mallocator_impl_t *impl = mallocator_monkey_impl(monkey);
+    mallocator_t *mallocator = mallocator_create_custom("step", impl);
     for (unsigned i = 0; i < 2; i++)
     {
 	for (unsigned j = 0; j < 20; j++)
@@ -162,6 +163,7 @@ static void test_mallocator_monkey_step(void)
 	}
     }
     mallocator_dereference(mallocator);
+    printf(".");
 }
 
 static struct timespec time_diff(struct timespec a, struct timespec b)
@@ -182,7 +184,7 @@ static struct timespec time_diff(struct timespec a, struct timespec b)
 
 static void test_mallocator_performance(void)
 {
-    struct timespec start, end, t_malloc, t_mallocator, t_mallocator_hs;
+    struct timespec start, end, t_malloc, t_mallocator; //, t_mallocator_hs;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (unsigned i = 0; i < 1000000; i++)
@@ -194,8 +196,7 @@ static void test_mallocator_performance(void)
     clock_gettime(CLOCK_MONOTONIC, &end);
     t_malloc = time_diff(end, start);
 
-    mallocator_std_t *mallocator_std = mallocator_std_create("performance");
-    mallocator_t *mallocator = mallocator_std_mallocator(mallocator_std);
+    mallocator_t *mallocator = mallocator_create("performance");
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (unsigned i = 0; i < 1000000; i++)
     {
@@ -207,6 +208,8 @@ static void test_mallocator_performance(void)
     mallocator_dereference(mallocator);
     t_mallocator = time_diff(end, start);
 
+    // TODO: With std impl
+#if 0
     mallocator_hs_t *mallocator_hs = mallocator_hs_create("performance");
     mallocator = mallocator_hs_mallocator(mallocator_hs);
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -219,17 +222,18 @@ static void test_mallocator_performance(void)
     clock_gettime(CLOCK_MONOTONIC, &end);
     mallocator_dereference(mallocator);
     t_mallocator_hs = time_diff(end, start);
+#endif
 
     printf("malloc %d.%09lds\n", (int)t_malloc.tv_sec, (long int)t_malloc.tv_nsec);
-    printf("mallocator_std %d.%09lds\n", (int)t_mallocator.tv_sec, (long int)t_mallocator.tv_nsec);
-    printf("mallocator_hs %d.%09lds\n", (int)t_mallocator_hs.tv_sec, (long int)t_mallocator_hs.tv_nsec);
+    printf("mallocator %d.%09lds\n", (int)t_mallocator.tv_sec, (long int)t_mallocator.tv_nsec);
+    //printf("mallocator_hs %d.%09lds\n", (int)t_mallocator_hs.tv_sec, (long int)t_mallocator_hs.tv_nsec);
 }
 
 int main(int argc, char *argv[])
 {
     test_default_mallocator();
     test_module_mallocator();
-    test_mallocator_hs();
+    test_mallocator();
     test_mallocator_monkey_random();
     test_mallocator_monkey_step();
     test_mallocator_performance();

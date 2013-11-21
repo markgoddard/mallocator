@@ -1,32 +1,30 @@
 #include <cgreen/cgreen.h>
 
-#include "mallocator_std.h"
+#include "mallocator.h"
 #include "mallocator.h"
 
-Describe(mallocator_std);
-BeforeEach(mallocator_std) {}
-AfterEach(mallocator_std) {}
+Describe(mallocator);
+BeforeEach(mallocator) {}
+AfterEach(mallocator) {}
 
-Ensure(mallocator_std, can_be_created)
+Ensure(mallocator, can_be_created)
 {
-    mallocator_std_t *std = mallocator_std_create("test");
-    assert_that(std, is_non_null);
-    mallocator_t *m = mallocator_std_mallocator(std);
+    mallocator_t *m = mallocator_create("test");
     assert_that(m, is_non_null);
     mallocator_dereference(m);
 }
 
-Ensure(mallocator_std, has_a_name)
+Ensure(mallocator, has_a_name)
 {
-    mallocator_t *m = mallocator_std_mallocator(mallocator_std_create("test"));
+    mallocator_t *m = mallocator_create("test");
     const char *name = mallocator_name(m);
     assert_that(name, is_equal_to_string("test"));
     mallocator_dereference(m);
 }
 
-Ensure(mallocator_std, can_malloc)
+Ensure(mallocator, can_malloc)
 {
-    mallocator_t *m = mallocator_std_mallocator(mallocator_std_create("test"));
+    mallocator_t *m = mallocator_create("test");
     unsigned num = 1024;
     int *ints = mallocator_malloc(m, num * sizeof(int));
     assert_that(ints, is_non_null);
@@ -38,9 +36,9 @@ Ensure(mallocator_std, can_malloc)
     mallocator_dereference(m);
 }
 
-Ensure(mallocator_std, can_calloc)
+Ensure(mallocator, can_calloc)
 {
-    mallocator_t *m = mallocator_std_mallocator(mallocator_std_create("test"));
+    mallocator_t *m = mallocator_create("test");
     unsigned num = 1024;
     int *ints = mallocator_calloc(m, num, sizeof(int));
     assert_that(ints, is_non_null);
@@ -53,9 +51,9 @@ Ensure(mallocator_std, can_calloc)
     mallocator_dereference(m);
 }
 
-Ensure(mallocator_std, can_realloc)
+Ensure(mallocator, can_realloc)
 {
-    mallocator_t *m = mallocator_std_mallocator(mallocator_std_create("test"));
+    mallocator_t *m = mallocator_create("test");
     unsigned num = 1024;
     int *ints = mallocator_realloc(m, NULL, 0, num * sizeof(int));
     assert_that(ints, is_non_null);
@@ -76,13 +74,13 @@ Ensure(mallocator_std, can_realloc)
     mallocator_dereference(m);
 }
 
-TestSuite *mallocator_std_tests(void)
+TestSuite *mallocator_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test_with_context(suite, mallocator_std, can_be_created);
-    add_test_with_context(suite, mallocator_std, has_a_name);
-    add_test_with_context(suite, mallocator_std, can_malloc);
-    add_test_with_context(suite, mallocator_std, can_calloc);
-    add_test_with_context(suite, mallocator_std, can_realloc);
+    add_test_with_context(suite, mallocator, can_be_created);
+    add_test_with_context(suite, mallocator, has_a_name);
+    add_test_with_context(suite, mallocator, can_malloc);
+    add_test_with_context(suite, mallocator, can_calloc);
+    add_test_with_context(suite, mallocator, can_realloc);
     return suite;
 }

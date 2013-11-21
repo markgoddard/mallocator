@@ -1,6 +1,6 @@
-#include "mallocator.h"
-#include "mallocator_interface.h"
 #include "mallocator_monkey.h"
+#include "mallocator.h"
+#include "mallocator_impl.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -26,10 +26,9 @@ typedef struct
 
 struct mallocator_monkey
 {
-    mallocator_t mallocator;
+    mallocator_impl_t impl;
     pthread_mutex_t lock;
     unsigned ref_count;	    /* Protected by lock */
-    const char *name;
     mallocator_monkey_fail_fn fn;
     void *arg;
     union
@@ -42,10 +41,8 @@ struct mallocator_monkey
 /**************************************************************************************************/
 /* mallocator_t interface */
 
-static mallocator_t *mallocator_monkey_create_child(void *parent_obj, const char *name);
-static void mallocator_monkey_reference(void *obj);
-static void mallocator_monkey_dereference(void *obj);
-static const char *mallocator_monkey_name(void *obj);
+static mallocator_impl_t *mallocator_monkey_create_child(void *parent_obj, const char *name);
+static void mallocator_monkey_destroy(void *obj);
 static void *mallocator_monkey_malloc(void *obj, size_t size);
 static void *mallocator_monkey_calloc(void *obj, size_t nmemb, size_t size);
 static void *mallocator_monkey_realloc(void *obj, void *ptr, size_t size, size_t new_size);
@@ -54,9 +51,7 @@ static void mallocator_monkey_free(void *obj, void *p, size_t size);
 static mallocator_interface_t mallocator_monkey_interface =
 {
     .create_child = mallocator_monkey_create_child,
-    .reference = mallocator_monkey_reference,
-    .dereference = mallocator_monkey_dereference,
-    .name = mallocator_monkey_name,
+    .destroy = mallocator_monkey_destroy,
     .malloc = mallocator_monkey_malloc,
     .calloc = mallocator_monkey_calloc,
     .realloc = mallocator_monkey_realloc,
@@ -73,17 +68,16 @@ static inline mallocator_monkey_t *mallocator_monkey_verify(void *obj)
     return mallocator;
 }
 
-static void mallocator_monkey_init(mallocator_monkey_t *mallocator, const char *name)
+static void mallocator_monkey_init(mallocator_monkey_t *mallocator)
 {
     *mallocator = (mallocator_monkey_t)
     {
-	.mallocator =
+	.impl =
 	{
 	    .obj = mallocator,
 	    .interface = &mallocator_monkey_interface,
 	},
 	.ref_count = 1,
-	.name = name,
 	.fn = NULL,
 	.arg = NULL,
     };
@@ -95,13 +89,12 @@ static void mallocator_monkey_fini(mallocator_monkey_t *mallocator)
     assert(pthread_mutex_destroy(&mallocator->lock) == 0);
     *mallocator = (mallocator_monkey_t)
     {
-	.mallocator =
+	.impl =
 	{
 	    .obj = NULL,
 	    .interface = NULL,
 	},
 	.ref_count = 0,
-	.name = NULL,
 	.fn = NULL,
 	.arg = NULL,
     };
@@ -117,54 +110,47 @@ static inline void mallocator_monkey_unlock(mallocator_monkey_t *mallocator)
     assert(pthread_mutex_unlock(&mallocator->lock) == 0);
 }
 
-static mallocator_monkey_t *mallocator_monkey_create_int(const char *name)
+static mallocator_monkey_t *mallocator_monkey_create_int(void)
 {
     mallocator_monkey_t *mallocator = malloc(sizeof(*mallocator));
     if (!mallocator) return NULL;
 
-    mallocator_monkey_init(mallocator, name);
+    mallocator_monkey_init(mallocator);
     return mallocator;
 }
 
-static void mallocator_monkey_destroy(mallocator_monkey_t *mallocator)
+static void mallocator_monkey_reference(mallocator_monkey_t *mallocator)
 {
-    mallocator_monkey_fini(mallocator);
-    free(mallocator);
-}
-
-static mallocator_t *mallocator_monkey_create_child(void *parent_obj, const char *name)
-{
-    mallocator_monkey_t *parent = mallocator_monkey_verify(parent_obj);
-    mallocator_monkey_reference(parent);
-    return &parent->mallocator;
-}
-
-static void mallocator_monkey_reference(void *obj)
-{
-    mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
-
     mallocator_monkey_lock(mallocator);
     mallocator->ref_count++;
     mallocator_monkey_unlock(mallocator);
 }
 
-static void mallocator_monkey_dereference(void *obj)
+static void mallocator_monkey_dereference(mallocator_monkey_t *mallocator)
 {
-    mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
-
     mallocator_monkey_lock(mallocator);
     mallocator->ref_count--;
     const bool destroy = mallocator->ref_count == 0;
     mallocator_monkey_unlock(mallocator);
 
     if (destroy)
-	mallocator_monkey_destroy(mallocator);
+    {
+	mallocator_monkey_fini(mallocator);
+	free(mallocator);
+    }
 }
 
-static const char *mallocator_monkey_name(void *obj)
+static mallocator_impl_t *mallocator_monkey_create_child(void *parent_obj, const char *name)
+{
+    mallocator_monkey_t *parent = mallocator_monkey_verify(parent_obj);
+    mallocator_monkey_reference(parent);
+    return &parent->impl;
+}
+
+static void mallocator_monkey_destroy(void *obj)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
-    return mallocator->name;
+    mallocator_monkey_dereference(mallocator);
 }
 
 static bool mallocator_monkey_fail_random(void *arg)
@@ -252,9 +238,9 @@ static void mallocator_monkey_free(void *obj, void *ptr, size_t size)
 /**************************************************************************************************/
 /* Public interface */
 
-mallocator_monkey_t *mallocator_monkey_create_random(const char *name, float p_failure, float p_recovery)
+mallocator_monkey_t *mallocator_monkey_create_random(float p_failure, float p_recovery)
 {
-    mallocator_monkey_t *mallocator = mallocator_monkey_create_int(name);
+    mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
     mallocator->chaos.random.p_failure = p_failure;
     mallocator->chaos.random.p_recovery = p_recovery;
@@ -264,9 +250,9 @@ mallocator_monkey_t *mallocator_monkey_create_random(const char *name, float p_f
     return mallocator;
 }
 
-mallocator_monkey_t *mallocator_monkey_create_step(const char *name, unsigned num_success, unsigned num_failure, bool repeat)
+mallocator_monkey_t *mallocator_monkey_create_step(unsigned num_success, unsigned num_failure, bool repeat)
 {
-    mallocator_monkey_t *mallocator = mallocator_monkey_create_int(name);
+    mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
     mallocator->chaos.step.num_success = num_success;
     mallocator->chaos.step.num_failure = num_failure;
@@ -279,16 +265,17 @@ mallocator_monkey_t *mallocator_monkey_create_step(const char *name, unsigned nu
     return mallocator;
 }
 
-mallocator_monkey_t *mallocator_monkey_create_custom(const char *name, mallocator_monkey_fail_fn fn, void *arg)
+mallocator_monkey_t *mallocator_monkey_create_custom(mallocator_monkey_fail_fn fn, void *arg)
 {
-    mallocator_monkey_t *mallocator = mallocator_monkey_create_int(name);
+    mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
     mallocator->fn = fn;
     mallocator->arg = arg;
     return mallocator;
 }
 
-mallocator_t *mallocator_monkey_mallocator(mallocator_monkey_t *mallocator)
+mallocator_impl_t *mallocator_monkey_impl(mallocator_monkey_t *mallocator)
 {
-    return &mallocator->mallocator;
+    mallocator_monkey_reference(mallocator);
+    return &mallocator->impl;
 }

@@ -14,16 +14,18 @@ static bool never_fail(void *arg)
 
 Ensure(mallocator_monkey, can_be_created)
 {
-    mallocator_monkey_t *std = mallocator_monkey_create_custom("test", never_fail, NULL);
-    assert_that(std, is_non_null);
-    mallocator_t *m = mallocator_monkey_mallocator(std);
+    mallocator_monkey_t *monkey = mallocator_monkey_create_custom(never_fail, NULL);
+    assert_that(monkey, is_non_null);
+    mallocator_impl_t *impl = mallocator_monkey_impl(monkey);
+    assert_that(impl, is_non_null);
+    mallocator_t *m = mallocator_create_custom("test", impl);
     assert_that(m, is_non_null);
     mallocator_dereference(m);
 }
 
 Ensure(mallocator_monkey, has_a_name)
 {
-    mallocator_t *m = mallocator_monkey_mallocator(mallocator_monkey_create_custom("test", never_fail, NULL));
+    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_impl(mallocator_monkey_create_custom(never_fail, NULL)));
     const char *name = mallocator_name(m);
     assert_that(name, is_equal_to_string("test"));
     mallocator_dereference(m);
@@ -31,7 +33,7 @@ Ensure(mallocator_monkey, has_a_name)
 
 Ensure(mallocator_monkey, can_malloc)
 {
-    mallocator_t *m = mallocator_monkey_mallocator(mallocator_monkey_create_custom("test", never_fail, NULL));
+    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_impl(mallocator_monkey_create_custom(never_fail, NULL)));
     unsigned num = 1024;
     int *ints = mallocator_malloc(m, num * sizeof(int));
     assert_that(ints, is_non_null);
@@ -45,7 +47,7 @@ Ensure(mallocator_monkey, can_malloc)
 
 Ensure(mallocator_monkey, can_calloc)
 {
-    mallocator_t *m = mallocator_monkey_mallocator(mallocator_monkey_create_custom("test", never_fail, NULL));
+    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_impl(mallocator_monkey_create_custom(never_fail, NULL)));
     unsigned num = 1024;
     int *ints = mallocator_calloc(m, num, sizeof(int));
     assert_that(ints, is_non_null);
@@ -60,7 +62,7 @@ Ensure(mallocator_monkey, can_calloc)
 
 Ensure(mallocator_monkey, can_realloc)
 {
-    mallocator_t *m = mallocator_monkey_mallocator(mallocator_monkey_create_custom("test", never_fail, NULL));
+    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_impl(mallocator_monkey_create_custom(never_fail, NULL)));
     unsigned num = 1024;
     int *ints = mallocator_realloc(m, NULL, 0, num * sizeof(int));
     assert_that(ints, is_non_null);

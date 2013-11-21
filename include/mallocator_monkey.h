@@ -1,7 +1,7 @@
 #ifndef MALLOCATOR_MONKEY_H
 #define MALLOCATOR_MONKEY_H
 
-#include "mallocator.h"
+#include "mallocator_impl.h"
 #include <stdbool.h>
 
 /*
@@ -18,12 +18,12 @@ typedef struct mallocator_monkey mallocator_monkey_t;
 /* Custom failure function */
 typedef bool (*mallocator_monkey_fail_fn)(void *arg);
 
-mallocator_monkey_t *mallocator_monkey_create_random(const char *name, float p_failure, float p_recovery);
+mallocator_monkey_t *mallocator_monkey_create_random(float p_failure, float p_recovery);
 
-mallocator_monkey_t *mallocator_monkey_create_step(const char *name, unsigned num_success, unsigned num_failure, bool repeat);
+mallocator_monkey_t *mallocator_monkey_create_step(unsigned num_success, unsigned num_failure, bool repeat);
 
-mallocator_monkey_t *mallocator_monkey_create_custom(const char *name, mallocator_monkey_fail_fn fn, void *arg);
+mallocator_monkey_t *mallocator_monkey_create_custom(mallocator_monkey_fail_fn fn, void *arg);
 
-mallocator_t *mallocator_monkey_mallocator(mallocator_monkey_t *mallocator);
+mallocator_impl_t *mallocator_monkey_impl(mallocator_monkey_t *mallocator);
 
 #endif // MALLOCATOR_MONKEY_H
