@@ -77,7 +77,7 @@ static void mallocator_monkey_init(mallocator_monkey_t *mallocator)
 	    .obj = mallocator,
 	    .interface = &mallocator_monkey_interface,
 	},
-	.ref_count = 1,
+	.ref_count = 0,
 	.fn = NULL,
 	.arg = NULL,
     };

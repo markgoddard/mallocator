@@ -1,24 +1,16 @@
 #include "mallocator.h"
 #include "mallocator_impl.h"
 
+#include "atomic.h"
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
 #include <string.h>
 
-static void mallocator_stats_init(mallocator_stats_t *stats)
-{
-    *stats = (mallocator_stats_t)
-    {
-	.blocks_allocated = 0,
-	.blocks_freed = 0,
-	.blocks_failed = 0,
-	.bytes_allocated = 0,
-	.bytes_freed = 0,
-	.bytes_failed = 0,
-    };
-}
+/* Define for lock free statistics accumulation */
+//#define MALLOCATOR_STATS_ATOMIC
 
 struct mallocator
 {
@@ -34,6 +26,19 @@ struct mallocator
 
 /**************************************************************************************************/
 /* Private interface */
+
+static inline void mallocator_stats_init(mallocator_stats_t *stats)
+{
+    *stats = (mallocator_stats_t)
+    {
+	.blocks_allocated = 0,
+	.blocks_freed = 0,
+	.blocks_failed = 0,
+	.bytes_allocated = 0,
+	.bytes_freed = 0,
+	.bytes_failed = 0,
+    };
+}
 
 static inline void mallocator_verify(const mallocator_t *mallocator)
 {
@@ -143,6 +148,74 @@ static void mallocator_destroy(mallocator_t *mallocator)
     mallocator_fini(mallocator);
     free(mallocator);
 }
+
+/**************************************************************************************************/
+/* Statistics */
+
+#ifdef MALLOCATOR_STATS_ATOMIC
+
+static inline void mallocator_stats_allocated(mallocator_t *mallocator, size_t size)
+{
+    atomic_fetch_add(&mallocator->stats.blocks_allocated, 1);
+    atomic_fetch_add(&mallocator->stats.bytes_allocated, size);
+}
+
+static inline void mallocator_stats_freed(mallocator_t *mallocator, size_t size)
+{
+    atomic_fetch_add(&mallocator->stats.blocks_freed, 1);
+    atomic_fetch_add(&mallocator->stats.bytes_freed, size);
+}
+
+static inline void mallocator_stats_failed(mallocator_t *mallocator, size_t size)
+{
+    atomic_fetch_add(&mallocator->stats.blocks_failed, 1);
+    atomic_fetch_add(&mallocator->stats.bytes_failed, size);
+}
+
+static inline void mallocator_stats_get(mallocator_t *mallocator, mallocator_stats_t *stats)
+{
+    stats->blocks_allocated = atomic_load(&mallocator->stats.blocks_allocated);
+    stats->bytes_allocated = atomic_load(&mallocator->stats.bytes_allocated);
+    stats->blocks_freed = atomic_load(&mallocator->stats.blocks_freed);
+    stats->bytes_freed = atomic_load(&mallocator->stats.bytes_freed);
+    stats->blocks_failed = atomic_load(&mallocator->stats.blocks_failed);
+    stats->bytes_failed = atomic_load(&mallocator->stats.bytes_failed);
+}
+
+#else
+
+static inline void mallocator_stats_allocated(mallocator_t *mallocator, size_t size)
+{
+    mallocator_lock(mallocator);
+    mallocator->stats.blocks_allocated += 1;
+    mallocator->stats.bytes_allocated += size;
+    mallocator_unlock(mallocator);
+}
+
+static inline void mallocator_stats_freed(mallocator_t *mallocator, size_t size)
+{
+    mallocator_lock(mallocator);
+    mallocator->stats.blocks_freed += 1;
+    mallocator->stats.bytes_freed += size;
+    mallocator_unlock(mallocator);
+}
+
+static inline void mallocator_stats_failed(mallocator_t *mallocator, size_t size)
+{
+    mallocator_lock(mallocator);
+    mallocator->stats.blocks_failed += 1;
+    mallocator->stats.bytes_failed += size;
+    mallocator_unlock(mallocator);
+}
+
+static inline void mallocator_stats_get(mallocator_t *mallocator, mallocator_stats_t *stats)
+{
+    mallocator_lock(mallocator);
+    *stats = mallocator->stats;
+    mallocator_unlock(mallocator);
+}
+
+#endif
 
 /**************************************************************************************************/
 /* Public interface */
@@ -278,9 +351,7 @@ void mallocator_stats(mallocator_t *mallocator, mallocator_stats_t *stats)
 {
     mallocator_verify(mallocator);
 
-    mallocator_lock(mallocator);
-    *stats = mallocator->stats;
-    mallocator_unlock(mallocator);
+    mallocator_stats_get(mallocator, stats);
 }
 
 void *mallocator_malloc(mallocator_t *mallocator, size_t size)
@@ -297,18 +368,14 @@ void *mallocator_malloc(mallocator_t *mallocator, size_t size)
 	ptr = malloc(size);
     }
 
-    mallocator_lock(mallocator);
     if (ptr)
     {
-	mallocator->stats.blocks_allocated++;
-	mallocator->stats.bytes_allocated += size;
+	mallocator_stats_allocated(mallocator, size);
     }
     else
     {
-	mallocator->stats.blocks_failed++;
-	mallocator->stats.bytes_failed += size;
+	mallocator_stats_failed(mallocator, size);
     }
-    mallocator_unlock(mallocator);
     return ptr;
 }
 
@@ -326,18 +393,14 @@ void *mallocator_calloc(mallocator_t *mallocator, size_t nmemb, size_t size)
 	ptr = calloc(nmemb, size);
     }
 
-    mallocator_lock(mallocator);
     if (ptr)
     {
-	mallocator->stats.blocks_allocated++;
-	mallocator->stats.bytes_allocated += size;
+	mallocator_stats_allocated(mallocator, nmemb * size);
     }
     else
     {
-	mallocator->stats.blocks_failed++;
-	mallocator->stats.bytes_failed += size;
+	mallocator_stats_failed(mallocator, nmemb * size);
     }
-    mallocator_unlock(mallocator);
     return ptr;
 }
 
@@ -355,20 +418,15 @@ void *mallocator_realloc(mallocator_t *mallocator, void *ptr, size_t size, size_
 	new_ptr = realloc(ptr, new_size);
     }
 
-    mallocator_lock(mallocator);
     if (new_ptr)
     {
-	mallocator->stats.blocks_allocated++;
-	mallocator->stats.blocks_freed++;
-	mallocator->stats.bytes_freed += size;
-	mallocator->stats.bytes_allocated += new_size;
+	mallocator_stats_freed(mallocator, size);
+	mallocator_stats_allocated(mallocator, new_size);
     }
     else
     {
-	mallocator->stats.blocks_failed++;
-	mallocator->stats.bytes_failed += new_size;
+	mallocator_stats_failed(mallocator, new_size);
     }
-    mallocator_unlock(mallocator);
     return new_ptr;
 }
 
@@ -385,8 +443,5 @@ void mallocator_free(mallocator_t *mallocator, void *ptr, size_t size)
 	free(ptr);
     }
 
-    mallocator_lock(mallocator);
-    mallocator->stats.blocks_freed++;
-    mallocator->stats.bytes_freed += size;
-    mallocator_unlock(mallocator);
+    mallocator_stats_freed(mallocator, size);
 }

@@ -185,13 +185,17 @@ static struct timespec time_diff(struct timespec a, struct timespec b)
 static void test_mallocator_performance(void)
 {
     struct timespec start, end, t_malloc, t_mallocator; //, t_mallocator_hs;
+    static void *ptrs[1000000];
 
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (unsigned i = 0; i < 1000000; i++)
     {
-	void *ptr = malloc(256);
-	assert(ptr);
-	free(ptr);
+	ptrs[i] = malloc(256);
+	assert(ptrs[i]);
+    }
+    for (unsigned i = 0; i < 1000000; i++)
+    {
+	free(ptrs[i]);
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
     t_malloc = time_diff(end, start);
@@ -200,9 +204,12 @@ static void test_mallocator_performance(void)
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (unsigned i = 0; i < 1000000; i++)
     {
-	void *ptr = mallocator_malloc(mallocator, 256);
-	assert(ptr);
-	mallocator_free(mallocator, ptr, 256);
+	ptrs[i] = mallocator_malloc(mallocator, 256);
+	assert(ptrs[i]);
+    }
+    for (unsigned i = 0; i < 1000000; i++)
+    {
+	mallocator_free(mallocator, ptrs[i], 256);
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
     mallocator_dereference(mallocator);
