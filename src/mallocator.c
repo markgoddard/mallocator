@@ -10,7 +10,7 @@
 #include <string.h>
 
 /* Define for lock free statistics accumulation */
-//#define MALLOCATOR_STATS_ATOMIC
+#define MALLOCATOR_STATS_ATOMIC
 
 struct mallocator
 {
@@ -418,14 +418,20 @@ void *mallocator_realloc(mallocator_t *mallocator, void *ptr, size_t size, size_
 	new_ptr = realloc(ptr, new_size);
     }
 
-    if (new_ptr)
+    if ((!new_ptr || new_size > 0) && size > 0)
     {
 	mallocator_stats_freed(mallocator, size);
-	mallocator_stats_allocated(mallocator, new_size);
     }
-    else
+    if (new_size > 0)
     {
-	mallocator_stats_failed(mallocator, new_size);
+	if (new_ptr)
+	{
+	    mallocator_stats_allocated(mallocator, new_size);
+	}
+	else
+	{
+	    mallocator_stats_failed(mallocator, new_size);
+	}
     }
     return new_ptr;
 }
