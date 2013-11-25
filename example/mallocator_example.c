@@ -24,7 +24,6 @@ static void test_default_mallocator(void)
     default_mallocator_free(ptr, 42);
     default_mallocator_fini();
     assert(!default_mallocator());
-    printf(".");
 }
 
 static void test_module_mallocator(void)
@@ -39,7 +38,6 @@ static void test_module_mallocator(void)
     module_mallocator_free(ptr, 42);
     module_mallocator_fini();
     assert(!module_mallocator());
-    printf(".");
 }
 
 static void print_mallocator_stats_fn(void *arg, mallocator_t *mallocator)
@@ -107,16 +105,13 @@ static void test_mallocator(void)
     print_mallocator_stats(root);
 
     mallocator_dereference(grandchild);
-
-    printf(".");
 }
 
 static void test_mallocator_monkey_random(void)
 {
     srand(time(NULL));
-    mallocator_monkey_t *monkey = mallocator_monkey_create_random(0.1, 0.1);
-    mallocator_impl_t *impl = mallocator_monkey_impl(monkey);
-    mallocator_t *mallocator = mallocator_create_custom("random", impl);
+    mallocator_impl_t *monkey = mallocator_monkey_create_random(0.1, 0.1);
+    mallocator_t *mallocator = mallocator_create_custom("random", monkey);
     for (unsigned i = 0; ; i++)
     {
 	void *ptr = mallocator_malloc(mallocator, 1);
@@ -141,14 +136,12 @@ static void test_mallocator_monkey_random(void)
 	}
     }
     mallocator_dereference(mallocator);
-    printf(".");
 }
 
 static void test_mallocator_monkey_step(void)
 {
-    mallocator_monkey_t *monkey = mallocator_monkey_create_step(20, 10, true);
-    mallocator_impl_t *impl = mallocator_monkey_impl(monkey);
-    mallocator_t *mallocator = mallocator_create_custom("step", impl);
+    mallocator_impl_t *monkey = mallocator_monkey_create_step(20, 10, true);
+    mallocator_t *mallocator = mallocator_create_custom("step", monkey);
     for (unsigned i = 0; i < 2; i++)
     {
 	for (unsigned j = 0; j < 20; j++)
@@ -163,7 +156,6 @@ static void test_mallocator_monkey_step(void)
 	}
     }
     mallocator_dereference(mallocator);
-    printf(".");
 }
 
 static struct timespec time_diff(struct timespec a, struct timespec b)

@@ -24,7 +24,7 @@ typedef struct
     bool failed;	    /* Protected by lock */
 } mallocator_monkey_step_t;
 
-struct mallocator_monkey
+typedef struct
 {
     mallocator_impl_t impl;
     pthread_mutex_t lock;
@@ -36,7 +36,7 @@ struct mallocator_monkey
 	mallocator_monkey_random_t random;
 	mallocator_monkey_step_t step;
     } chaos;
-};
+} mallocator_monkey_t;
 
 /**************************************************************************************************/
 /* mallocator_t interface */
@@ -77,7 +77,7 @@ static void mallocator_monkey_init(mallocator_monkey_t *mallocator)
 	    .obj = mallocator,
 	    .interface = &mallocator_monkey_interface,
 	},
-	.ref_count = 0,
+	.ref_count = 1,
 	.fn = NULL,
 	.arg = NULL,
     };
@@ -223,6 +223,10 @@ static void *mallocator_monkey_calloc(void *obj, size_t nmemb, size_t size)
 static void *mallocator_monkey_realloc(void *obj, void *ptr, size_t size, size_t new_size)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_verify(obj);
+    /* Don't count resize to zero 'free' as an allocation */
+    if (new_size == 0)
+	return realloc(ptr, new_size);
+
     if (mallocator_monkey_fail(mallocator))
 	return NULL;
 
@@ -238,7 +242,7 @@ static void mallocator_monkey_free(void *obj, void *ptr, size_t size)
 /**************************************************************************************************/
 /* Public interface */
 
-mallocator_monkey_t *mallocator_monkey_create_random(float p_failure, float p_recovery)
+mallocator_impl_t *mallocator_monkey_create_random(float p_failure, float p_recovery)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
@@ -247,10 +251,10 @@ mallocator_monkey_t *mallocator_monkey_create_random(float p_failure, float p_re
     mallocator->chaos.random.failing = false;
     mallocator->fn = mallocator_monkey_fail_random;
     mallocator->arg = &mallocator->chaos.random;
-    return mallocator;
+    return &mallocator->impl;
 }
 
-mallocator_monkey_t *mallocator_monkey_create_step(unsigned num_success, unsigned num_failure, bool repeat)
+mallocator_impl_t *mallocator_monkey_create_step(unsigned num_success, unsigned num_failure, bool repeat)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
@@ -262,20 +266,14 @@ mallocator_monkey_t *mallocator_monkey_create_step(unsigned num_success, unsigne
     mallocator->chaos.step.failed = false;
     mallocator->fn = mallocator_monkey_fail_step;
     mallocator->arg = &mallocator->chaos.step;
-    return mallocator;
+    return &mallocator->impl;
 }
 
-mallocator_monkey_t *mallocator_monkey_create_custom(mallocator_monkey_fail_fn fn, void *arg)
+mallocator_impl_t *mallocator_monkey_create_custom(mallocator_monkey_fail_fn fn, void *arg)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
     mallocator->fn = fn;
     mallocator->arg = arg;
-    return mallocator;
-}
-
-mallocator_impl_t *mallocator_monkey_impl(mallocator_monkey_t *mallocator)
-{
-    mallocator_monkey_reference(mallocator);
     return &mallocator->impl;
 }
