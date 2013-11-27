@@ -13,5 +13,9 @@ static TestSuite *mallocator_all_tests(void)
 
 int main(int argc, char *argv[])
 {
+    if (argc > 1)
+    {
+	return run_single_test(mallocator_all_tests(), argv[1], create_text_reporter());
+    }
     return run_test_suite(mallocator_all_tests(), create_text_reporter());
 }

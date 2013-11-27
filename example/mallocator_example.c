@@ -87,23 +87,20 @@ static void test_mallocator(void)
     mallocator_t *child2 = mallocator_create_child(root, "child2");
     mallocator_t *grandchild = mallocator_create_child(child1, "grandchild");
 
-    mallocator_dereference(root);
-
     int *int_array2 = mallocator_malloc(child1, 8 * sizeof(int));
     mallocator_free(child1, int_array2, 8 * sizeof(int));
 
-    mallocator_dereference(child1);
-
     int *int_array3 = mallocator_malloc(child2, 16 * sizeof(int));
     mallocator_free(child2, int_array3, 16 * sizeof(int));
-
-    mallocator_dereference(child2);
 
     int *int_array4 = mallocator_malloc(grandchild, 32 * sizeof(int));
     mallocator_free(grandchild, int_array4, 32 * sizeof(int));
 
     print_mallocator_stats(root);
 
+    mallocator_dereference(root);
+    mallocator_dereference(child1);
+    mallocator_dereference(child2);
     mallocator_dereference(grandchild);
 }
 

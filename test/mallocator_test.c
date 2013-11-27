@@ -239,6 +239,58 @@ Ensure(mallocator, iterates_children_in_order)
     }
 }
 
+Ensure(mallocator, can_lookup_children)
+{
+    unsigned num_children = 4;
+    const char *names[4] = { "foo", "bar", "baz", "foobar" };
+    mallocator_t *children[num_children];
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	children[i] = mallocator_create_child(m, names[i]);
+    }
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	mallocator_t *lookup = mallocator_child_lookup(m, names[i]);
+	assert_that(lookup, is_equal_to(children[i]));
+	mallocator_dereference(lookup);
+    }
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	mallocator_dereference(children[i]);
+    }
+}
+
+Ensure(mallocator, references_iterated_children)
+{
+    unsigned num_children = 4;
+    const char *names[4] = { "1", "2", "3", "4" };
+    mallocator_t *children[num_children];
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	children[i] = mallocator_create_child(m, names[i]);
+    }
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	mallocator_t *curr = mallocator_child_begin(m);
+	for (unsigned j = 0; j < i; j++)
+	{
+	    curr = mallocator_child_next(curr);
+	}
+	mallocator_dereference(curr);
+    }
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	mallocator_dereference(children[i]);
+    }
+}
+
+Ensure(mallocator, children_are_uniquely_named)
+{
+    mallocator_t *child = mallocator_create_child(m, "child");
+    assert_that(mallocator_create_child(m, "child"), is_null);
+    mallocator_dereference(child);
+}
+
 Ensure(mallocator, can_malloc)
 {
     unsigned num = 1024;
@@ -374,6 +426,9 @@ TestSuite *mallocator_tests(void)
     add_test_with_context(suite, mallocator, can_create_multiple_generations);
     add_test_with_context(suite, mallocator, references_children);
     add_test_with_context(suite, mallocator, iterates_children_in_order);
+    add_test_with_context(suite, mallocator, can_lookup_children);
+    add_test_with_context(suite, mallocator, references_iterated_children);
+    add_test_with_context(suite, mallocator, children_are_uniquely_named);
     add_test_with_context(suite, mallocator, can_malloc);
     add_test_with_context(suite, mallocator, can_calloc);
     add_test_with_context(suite, mallocator, can_realloc);
