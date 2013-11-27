@@ -85,20 +85,31 @@ Ensure(mallocator, can_create_children)
 {
     mallocator_t *child = mallocator_create_child(m, "child");
     assert_that(child, is_non_null);
+    assert_that(mallocator_child_begin(m), is_equal_to(child));
+    assert_that(mallocator_child_next(child), is_null);
     mallocator_dereference(child);
 }
 
 Ensure(mallocator, can_create_multiple_children)
 {
+    unsigned num_children = 10;
     char names[10][8];
     mallocator_t *child[10];
-    for (unsigned i = 0; i < 10; i++)
+    for (unsigned i = 0; i < num_children; i++)
     {
 	snprintf(names[i], sizeof(names[i]), "child%u", i);
 	child[i] = mallocator_create_child(m, names[i]);
 	assert_that(child[i], is_non_null);
     }
-    for (unsigned i = 0; i < 10; i++)
+    mallocator_t *curr = mallocator_child_begin(m);
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	/* Should be iterated in order */
+	assert_that(curr, is_equal_to(child[i]));
+	curr = mallocator_child_next(curr);
+    }
+    assert_that(curr, is_null);
+    for (unsigned i = 0; i < num_children; i++)
     {
 	mallocator_dereference(child[i]);
     }
@@ -134,6 +145,26 @@ Ensure(mallocator, can_create_multiple_generations)
 	    }
 	}
     }
+    mallocator_t *curr1 = mallocator_child_begin(m);
+    for (unsigned c = 0; c < num_children; c++)
+    {
+	/* Should be iterated in order */
+	assert_that(curr1, is_equal_to(gen1[c]));
+	mallocator_t *curr2 = mallocator_child_begin(curr1);
+	for (unsigned gc = 0; gc < num_children; gc++)
+	{
+	    assert_that(curr2, is_equal_to(gen2[c][gc]));
+	    mallocator_t *curr3 = mallocator_child_begin(curr2);
+	    for (unsigned ggc = 0; ggc < num_children; ggc++)
+	    {
+		assert_that(curr3, is_equal_to(gen3[c][gc][ggc]));
+		curr3 = mallocator_child_next(curr3);
+	    }
+	    curr2 = mallocator_child_next(curr2);
+	}
+	curr1 = mallocator_child_next(curr1);
+    }
+    assert_that(curr1, is_null);
     for (unsigned c = 0; c < num_children; c++)
     {
 	for (unsigned gc = 0; gc < num_children; gc++)
@@ -160,9 +191,51 @@ Ensure(mallocator, references_children)
 	family[generation] = mallocator_create_child(family[generation - 1], names[generation]);
 	assert_that(family[generation], is_non_null);
     }
+    for (unsigned generation = 0; generation < num_generations - 1; generation++)
+    {
+	assert_that(mallocator_child_begin(family[generation]), is_equal_to(family[generation + 1]));
+	assert_that(mallocator_child_next(family[generation + 1]), is_null);
+    }
     for (unsigned generation = 1; generation < num_generations; generation++)
     {
 	mallocator_dereference(family[generation]);
+    }
+}
+
+static void check_names(void *obj, mallocator_t *mallocator)
+{
+    mallocator_t **last_p = obj;
+    if (*last_p)
+    {
+	int r = strcmp(mallocator_name(mallocator), mallocator_name(*last_p));
+	assert_that(r, is_greater_than(0));
+    }
+    *last_p = mallocator;
+}
+
+Ensure(mallocator, iterates_children_in_order)
+{
+    unsigned num_children = 4;
+    const char *names[4] = { "a", "aaa", "bcd", "zyx" };
+    unsigned order[4] = { 2, 1, 3, 0 };
+    mallocator_t *children[num_children];
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	children[i] = mallocator_create_child(m, names[order[i]]);
+	assert_that(children[i], is_non_null);
+    }
+    mallocator_t *curr = mallocator_child_begin(m);
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	assert_that(mallocator_name(curr), is_equal_to_string(names[i]));
+	curr = mallocator_child_next(curr);
+    }
+    assert_that(curr, is_null);
+    mallocator_t *last = NULL;
+    mallocator_iterate(m, check_names, &last);
+    for (unsigned i = 0; i < num_children; i++)
+    {
+	mallocator_dereference(children[i]);
     }
 }
 
@@ -300,6 +373,7 @@ TestSuite *mallocator_tests(void)
     add_test_with_context(suite, mallocator, can_create_children);
     add_test_with_context(suite, mallocator, can_create_multiple_generations);
     add_test_with_context(suite, mallocator, references_children);
+    add_test_with_context(suite, mallocator, iterates_children_in_order);
     add_test_with_context(suite, mallocator, can_malloc);
     add_test_with_context(suite, mallocator, can_calloc);
     add_test_with_context(suite, mallocator, can_realloc);

@@ -91,11 +91,21 @@ static void mallocator_child_add(mallocator_t *parent, mallocator_t *child)
     mallocator_reference(child);
     mallocator_lock(parent);
     child->parent = parent;
-    if (parent->children)
+    if (!parent->children || strcmp(child->name, parent->children->name) < 0)
+    {
+	/* Front of list */
 	child->next_child = parent->children;
+	parent->children = child;
+    }
     else
-	child->next_child = NULL;
-    parent->children = child;
+    {
+	mallocator_t *curr = parent->children;
+	while (curr->next_child && strcmp(child->name, curr->next_child->name) > 0)
+	    curr = curr->next_child;
+	/* Add after curr */
+	child->next_child = curr->next_child;
+	curr->next_child = child;
+    }
     mallocator_unlock(parent);
 }
 
