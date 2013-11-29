@@ -2,12 +2,14 @@
 
 TestSuite *mallocator_tests(void);
 TestSuite *mallocator_monkey_tests(void);
+TestSuite *mallocator_tracer_tests(void);
 
 static TestSuite *mallocator_all_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_suite(suite, mallocator_tests());
     add_suite(suite, mallocator_monkey_tests());
+    add_suite(suite, mallocator_tracer_tests());
     return suite;
 }
 
