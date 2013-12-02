@@ -1,7 +1,6 @@
 #include <cgreen/cgreen.h>
 
 #include "mallocator.h"
-#include "mallocator.h"
 
 #include <malloc.h>
 

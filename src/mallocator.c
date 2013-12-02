@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
+#define __USE_XOPEN2K8
 #include <string.h>
 
 /* Define for lock free statistics accumulation */
@@ -33,7 +34,7 @@ struct mallocator
     mallocator_tree_t *tree;			/* tree containing this mallocator */
     mallocator_impl_t *pimpl;			/* Underlying mallocator implementation (may be NULL) */
     unsigned ref_count;				/* Protected by tree->lock */
-    const char *name;
+    char *name;					/* Heap allocated duplicate string */
     mallocator_t *parent;
     mallocator_t *children;			/* Protected by tree->lock */
     mallocator_t *next_child;			/* Protected by tree->lock */
@@ -189,7 +190,7 @@ static inline void mallocator_verify(const mallocator_t *mallocator)
     assert(mallocator->ref_count > 0);
 }
 
-static void mallocator_init(mallocator_t *mallocator, mallocator_tree_t *tree, const char *name, mallocator_impl_t *pimpl)
+static void mallocator_init(mallocator_t *mallocator, mallocator_tree_t *tree, char *name, mallocator_impl_t *pimpl)
 {
     *mallocator = (mallocator_t)
     {
@@ -285,8 +286,16 @@ static mallocator_t *mallocator_create_int(const char *name, mallocator_impl_t *
 	tree = parent->tree;
     }
 
+    char *name_copy = strdup(name);
+    if (!name_copy)
+    {
+	free(mallocator);
+	if (!parent) mallocator_tree_destroy(tree);
+	return NULL;
+    }
+
     bool valid = true;
-    mallocator_init(mallocator, tree, name, pimpl);
+    mallocator_init(mallocator, tree, name_copy, pimpl);
     mallocator_tree_lock(tree);
     if (parent)	valid = mallocator_child_add(parent, mallocator);
     mallocator_tree_unlock(tree);
@@ -294,6 +303,7 @@ static mallocator_t *mallocator_create_int(const char *name, mallocator_impl_t *
     /* Check for duplicate name */
     if (!valid)
     {
+	free(mallocator->name);
 	mallocator_fini(mallocator);
 	free(mallocator);
 	if (!parent) mallocator_tree_destroy(tree);
@@ -318,6 +328,7 @@ static void mallocator_destroy(mallocator_t *mallocator)
 	mallocator->pimpl = NULL;
     }
 
+    free(mallocator->name);
     mallocator_fini(mallocator);
     free(mallocator);
 }
