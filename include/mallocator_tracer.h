@@ -6,6 +6,9 @@
 
 /*
  * mallocator implementation which traces all memory allocation and frees.
+ * This information is passed synchronously to a user supplied callback function, with the intent
+ * that it is processed externally. This may be performed in a separate thread via an event queue,
+ * in a separate process or even on a separate machine.
  */
 
 enum { MALLOCATOR_TRACER_BACKTRACE_MAX = 8 };
@@ -20,7 +23,9 @@ typedef enum
 
 typedef struct
 {
-    mallocator_tracer_type_t type;
+    const char *name;		    /* Do not reference this string directly after the callback
+				       returns */
+    mallocator_tracer_type_t type;  /* Event type */
     void *ptr;
     union
     {
@@ -44,7 +49,7 @@ typedef struct
 	    size_t size;
 	} free;
     } e;
-    void *backtrace[MALLOCATOR_TRACER_BACKTRACE_MAX];
+    void *backtrace[MALLOCATOR_TRACER_BACKTRACE_MAX];	/* Caller function backtrace */
     size_t backtrace_len;
 } mallocator_tracer_event_t;
 

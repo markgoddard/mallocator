@@ -54,6 +54,7 @@ Ensure(mallocator_tracer, traces_malloc)
     {
 	ints[i] = i;
     }
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_MALLOC));
     assert_that(event.ptr, is_equal_to(ints));
     assert_that(event.e.malloc.size, is_equal_to(num * sizeof(int)));
@@ -63,6 +64,7 @@ Ensure(mallocator_tracer, traces_malloc)
 	assert_that(event.backtrace[i], is_non_null);
     }
     mallocator_free(m, ints, num * sizeof(int));
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_FREE));
     assert_that(event.ptr, is_equal_to(ints));
     assert_that(event.e.free.size, is_equal_to(num * sizeof(int)));
@@ -86,6 +88,7 @@ Ensure(mallocator_tracer, traces_calloc)
 	assert_that(ints[i], is_equal_to(0));
 	ints[i] = i;
     }
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_CALLOC));
     assert_that(event.ptr, is_equal_to(ints));
     assert_that(event.e.calloc.nmemb, is_equal_to(num));
@@ -96,6 +99,7 @@ Ensure(mallocator_tracer, traces_calloc)
 	assert_that(event.backtrace[i], is_non_null);
     }
     mallocator_free(m, ints, num * sizeof(int));
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_FREE));
     assert_that(event.ptr, is_equal_to(ints));
     assert_that(event.e.free.size, is_equal_to(num * sizeof(int)));
@@ -118,6 +122,7 @@ Ensure(mallocator_tracer, traces_realloc)
     {
 	ints[i] = i;
     }
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
     assert_that(event.ptr, is_equal_to(ints));
     assert_that(event.e.realloc.old_ptr, is_null);
@@ -136,6 +141,7 @@ Ensure(mallocator_tracer, traces_realloc)
 	if (i < num) assert_that(ints[i], is_equal_to(i));
 	else ints[i] = i;
     }
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
     assert_that(event.ptr, is_equal_to(ints));
     assert_that(event.e.realloc.old_ptr, is_equal_to(ints));
@@ -148,6 +154,7 @@ Ensure(mallocator_tracer, traces_realloc)
     }
     int *no_ints = mallocator_realloc(m, more_ints, more_num * sizeof(int), 0);
     assert_that(no_ints, is_null);
+    assert_that(event.name, is_equal_to_string("test"));
     assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
     assert_that(event.ptr, is_null);
     assert_that(event.e.realloc.old_ptr, is_equal_to(more_ints));
@@ -161,6 +168,225 @@ Ensure(mallocator_tracer, traces_realloc)
     mallocator_dereference(m);
 }
 
+Ensure(mallocator_tracer, traces_child_malloc)
+{
+    mallocator_tracer_event_t event = { 0 };
+    mallocator_t *m = mallocator_tracer_create("test", trace_copy, &event);
+    mallocator_t *child = mallocator_create_child(m, "child");
+    mallocator_t *grandchild = mallocator_create_child(child, "grandchild");
+    unsigned num = 1024;
+    int *ints = mallocator_malloc(child, num * sizeof(int));
+    assert_that(ints, is_non_null);
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_MALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.malloc.size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_free(child, ints, num * sizeof(int));
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_FREE));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.free.size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    ints = mallocator_malloc(grandchild, num * sizeof(int));
+    assert_that(ints, is_non_null);
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_MALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.malloc.size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_free(grandchild, ints, num * sizeof(int));
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_FREE));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.free.size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_dereference(grandchild);
+    mallocator_dereference(child);
+    mallocator_dereference(m);
+}
+
+Ensure(mallocator_tracer, traces_child_calloc)
+{
+    mallocator_tracer_event_t event = { 0 };
+    mallocator_t *m = mallocator_tracer_create("test", trace_copy, &event);
+    mallocator_t *child = mallocator_create_child(m, "child");
+    mallocator_t *grandchild = mallocator_create_child(child, "grandchild");
+    unsigned num = 1024;
+    int *ints = mallocator_calloc(child, num, sizeof(int));
+    assert_that(ints, is_non_null);
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_CALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.calloc.nmemb, is_equal_to(num));
+    assert_that(event.e.calloc.size, is_equal_to(sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_free(child, ints, num * sizeof(int));
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_FREE));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.free.size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    ints = mallocator_calloc(grandchild, num, sizeof(int));
+    assert_that(ints, is_non_null);
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_CALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.calloc.nmemb, is_equal_to(num));
+    assert_that(event.e.calloc.size, is_equal_to(sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_free(grandchild, ints, num * sizeof(int));
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_FREE));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.free.size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_dereference(grandchild);
+    mallocator_dereference(child);
+    mallocator_dereference(m);
+}
+
+Ensure(mallocator_tracer, traces_child_realloc)
+{
+    mallocator_tracer_event_t event = { 0 };
+    mallocator_t *m = mallocator_tracer_create("test", trace_copy, &event);
+    mallocator_t *child = mallocator_create_child(m, "child");
+    mallocator_t *grandchild = mallocator_create_child(child, "grandchild");
+    unsigned num = 1024;
+    int *ints = mallocator_realloc(child, NULL, 0, num * sizeof(int));
+    assert_that(ints, is_non_null);
+    for (unsigned i = 0; i < num; i++)
+    {
+	ints[i] = i;
+    }
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.realloc.old_ptr, is_null);
+    assert_that(event.e.realloc.old_size, is_equal_to(0));
+    assert_that(event.e.realloc.new_size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    unsigned more_num = 10 * num;
+    int *more_ints = mallocator_realloc(child, ints, num * sizeof(int), more_num * sizeof(int));
+    assert_that(more_ints, is_non_null);
+    for (unsigned i = 0; i < more_num; i++)
+    {
+	if (i < num) assert_that(ints[i], is_equal_to(i));
+	else ints[i] = i;
+    }
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.realloc.old_ptr, is_equal_to(ints));
+    assert_that(event.e.realloc.old_size, is_equal_to(num * sizeof(int)));
+    assert_that(event.e.realloc.new_size, is_equal_to(more_num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    int *no_ints = mallocator_realloc(child, more_ints, more_num * sizeof(int), 0);
+    assert_that(no_ints, is_null);
+    assert_that(event.name, is_equal_to_string("test.child"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
+    assert_that(event.ptr, is_null);
+    assert_that(event.e.realloc.old_ptr, is_equal_to(more_ints));
+    assert_that(event.e.realloc.old_size, is_equal_to(more_num * sizeof(int)));
+    assert_that(event.e.realloc.new_size, is_equal_to(0));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    ints = mallocator_realloc(grandchild, NULL, 0, num * sizeof(int));
+    assert_that(ints, is_non_null);
+    for (unsigned i = 0; i < num; i++)
+    {
+	ints[i] = i;
+    }
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.realloc.old_ptr, is_null);
+    assert_that(event.e.realloc.old_size, is_equal_to(0));
+    assert_that(event.e.realloc.new_size, is_equal_to(num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    more_ints = mallocator_realloc(grandchild, ints, num * sizeof(int), more_num * sizeof(int));
+    assert_that(more_ints, is_non_null);
+    for (unsigned i = 0; i < more_num; i++)
+    {
+	if (i < num) assert_that(ints[i], is_equal_to(i));
+	else ints[i] = i;
+    }
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
+    assert_that(event.ptr, is_equal_to(ints));
+    assert_that(event.e.realloc.old_ptr, is_equal_to(ints));
+    assert_that(event.e.realloc.old_size, is_equal_to(num * sizeof(int)));
+    assert_that(event.e.realloc.new_size, is_equal_to(more_num * sizeof(int)));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    no_ints = mallocator_realloc(grandchild, more_ints, more_num * sizeof(int), 0);
+    assert_that(no_ints, is_null);
+    assert_that(event.name, is_equal_to_string("test.child.grandchild"));
+    assert_that(event.type, is_equal_to(MALLOCATOR_TRACER_REALLOC));
+    assert_that(event.ptr, is_null);
+    assert_that(event.e.realloc.old_ptr, is_equal_to(more_ints));
+    assert_that(event.e.realloc.old_size, is_equal_to(more_num * sizeof(int)));
+    assert_that(event.e.realloc.new_size, is_equal_to(0));
+    assert_that(event.backtrace_len, is_greater_than(0));
+    for (unsigned i = 0; i < event.backtrace_len; i++)
+    {
+	assert_that(event.backtrace[i], is_non_null);
+    }
+    mallocator_dereference(grandchild);
+    mallocator_dereference(child);
+    mallocator_dereference(m);
+}
+
 TestSuite *mallocator_tracer_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -168,6 +394,9 @@ TestSuite *mallocator_tracer_tests(void)
     add_test_with_context(suite, mallocator_tracer, has_a_name);
     add_test_with_context(suite, mallocator_tracer, traces_malloc);
     add_test_with_context(suite, mallocator_tracer, traces_calloc);
+    add_test_with_context(suite, mallocator_tracer, traces_child_realloc);
+    add_test_with_context(suite, mallocator_tracer, traces_child_malloc);
+    add_test_with_context(suite, mallocator_tracer, traces_child_calloc);
     add_test_with_context(suite, mallocator_tracer, traces_realloc);
     return suite;
 }
