@@ -242,7 +242,7 @@ static void mallocator_monkey_free(void *obj, void *ptr, size_t size)
 /**************************************************************************************************/
 /* Public interface */
 
-mallocator_impl_t *mallocator_monkey_create_random(float p_failure, float p_recovery)
+mallocator_t *mallocator_monkey_create_random(const char *name, float p_failure, float p_recovery)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
@@ -251,10 +251,16 @@ mallocator_impl_t *mallocator_monkey_create_random(float p_failure, float p_reco
     mallocator->chaos.random.failing = false;
     mallocator->fn = mallocator_monkey_fail_random;
     mallocator->arg = &mallocator->chaos.random;
-    return &mallocator->impl;
+    mallocator_t *m = mallocator_create_custom(name, &mallocator->impl);
+    if (!m)
+    {
+	mallocator_monkey_destroy(&mallocator->impl);
+	return NULL;
+    }
+    return m;
 }
 
-mallocator_impl_t *mallocator_monkey_create_step(unsigned num_success, unsigned num_failure, bool repeat)
+mallocator_t *mallocator_monkey_create_step(const char *name, unsigned num_success, unsigned num_failure, bool repeat)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
@@ -266,14 +272,26 @@ mallocator_impl_t *mallocator_monkey_create_step(unsigned num_success, unsigned 
     mallocator->chaos.step.failed = false;
     mallocator->fn = mallocator_monkey_fail_step;
     mallocator->arg = &mallocator->chaos.step;
-    return &mallocator->impl;
+    mallocator_t *m = mallocator_create_custom(name, &mallocator->impl);
+    if (!m)
+    {
+	mallocator_monkey_destroy(&mallocator->impl);
+	return NULL;
+    }
+    return m;
 }
 
-mallocator_impl_t *mallocator_monkey_create_custom(mallocator_monkey_fail_fn fn, void *arg)
+mallocator_t *mallocator_monkey_create_custom(const char *name, mallocator_monkey_fail_fn fn, void *arg)
 {
     mallocator_monkey_t *mallocator = mallocator_monkey_create_int();
     if (!mallocator) return NULL;
     mallocator->fn = fn;
     mallocator->arg = arg;
-    return &mallocator->impl;
+    mallocator_t *m = mallocator_create_custom(name, &mallocator->impl);
+    if (!m)
+    {
+	mallocator_monkey_destroy(&mallocator->impl);
+	return NULL;
+    }
+    return m;
 }

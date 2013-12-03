@@ -107,8 +107,7 @@ static void test_mallocator(void)
 static void test_mallocator_monkey_random(void)
 {
     srand(time(NULL));
-    mallocator_impl_t *monkey = mallocator_monkey_create_random(0.1, 0.1);
-    mallocator_t *mallocator = mallocator_create_custom("random", monkey);
+    mallocator_t *mallocator = mallocator_monkey_create_random("random", 0.1, 0.1);
     for (unsigned i = 0; ; i++)
     {
 	void *ptr = mallocator_malloc(mallocator, 1);
@@ -137,8 +136,7 @@ static void test_mallocator_monkey_random(void)
 
 static void test_mallocator_monkey_step(void)
 {
-    mallocator_impl_t *monkey = mallocator_monkey_create_step(20, 10, true);
-    mallocator_t *mallocator = mallocator_create_custom("step", monkey);
+    mallocator_t *mallocator = mallocator_monkey_create_step("step", 20, 10, true);
     for (unsigned i = 0; i < 2; i++)
     {
 	for (unsigned j = 0; j < 20; j++)

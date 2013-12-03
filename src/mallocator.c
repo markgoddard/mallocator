@@ -441,6 +441,17 @@ const char *mallocator_full_name(mallocator_t *mallocator, char *buf, size_t buf
     return buf;
 }
 
+mallocator_t *mallocator_parent(mallocator_t *mallocator)
+{
+    mallocator_verify(mallocator);
+
+    /* parent->ref_count may be 0 - use internal reference to avoid assertion */
+    mallocator_tree_lock(mallocator->tree);
+    if (mallocator->parent) mallocator_reference_int(mallocator->parent);
+    mallocator_tree_unlock(mallocator->tree);
+    return mallocator->parent;
+}
+
 mallocator_t *mallocator_child_begin(mallocator_t *mallocator)
 {
     mallocator_verify(mallocator);

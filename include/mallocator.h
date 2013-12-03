@@ -36,6 +36,8 @@ const char *mallocator_name(mallocator_t *mallocator);
 
 const char *mallocator_full_name(mallocator_t *mallocator, char *buf, size_t buf_len);
 
+mallocator_t *mallocator_parent(mallocator_t *mallocator);
+
 mallocator_t *mallocator_child_begin(mallocator_t *mallocator);
 
 mallocator_t *mallocator_child_next(mallocator_t *mallocator);

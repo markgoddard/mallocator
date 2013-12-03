@@ -1,7 +1,7 @@
 #ifndef MALLOCATOR_TRACER_H
 #define MALLOCATOR_TRACER_H
 
-#include "mallocator_impl.h"
+#include "mallocator.h"
 #include <stdbool.h>
 
 /*

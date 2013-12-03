@@ -70,6 +70,8 @@ static void count_mallocators(void *arg, mallocator_t *m)
 
 Ensure(mallocator, has_no_family)
 {
+    assert_that(mallocator_parent(m), is_null);
+
     assert_that(mallocator_child_begin(m), is_null);
 
     mallocator_reference(m);	/* Next dereferences m */
@@ -84,6 +86,8 @@ Ensure(mallocator, can_create_children)
 {
     mallocator_t *child = mallocator_create_child(m, "child");
     assert_that(child, is_non_null);
+    assert_that(mallocator_parent(child), is_equal_to(m));
+    mallocator_dereference(m);	/* mallocator_parent references m */
     assert_that(mallocator_child_begin(m), is_equal_to(child));
     assert_that(mallocator_child_next(child), is_null);
     mallocator_dereference(child);
@@ -99,6 +103,8 @@ Ensure(mallocator, can_create_multiple_children)
 	snprintf(names[i], sizeof(names[i]), "child%u", i);
 	child[i] = mallocator_create_child(m, names[i]);
 	assert_that(child[i], is_non_null);
+	assert_that(mallocator_parent(child[i]), is_equal_to(m));
+	mallocator_dereference(m);  /* mallocator_parent references m */
     }
     mallocator_t *curr = mallocator_child_begin(m);
     for (unsigned i = 0; i < num_children; i++)
@@ -129,18 +135,24 @@ Ensure(mallocator, can_create_multiple_generations)
 	gen1[c] = mallocator_create_child(m, names1[c]);
 	assert_that(gen1[c], is_non_null);
 	assert_that(gen1[c], is_not_equal_to(m));
+	assert_that(mallocator_parent(gen1[c]), is_equal_to(m));
+	mallocator_dereference(m);
 	for (unsigned gc = 0; gc < num_children; gc++)
 	{
 	    snprintf(names2[c][gc], sizeof(names2[c][gc]), "gen2:%u,%u", c, gc);
 	    gen2[c][gc] = mallocator_create_child(gen1[c], names2[c][gc]);
 	    assert_that(gen2[c][gc], is_non_null);
 	    assert_that(gen2[c][gc], is_not_equal_to(gen1[c]));
+	    assert_that(mallocator_parent(gen2[c][gc]), is_equal_to(gen1[c]));
+	    mallocator_dereference(gen1[c]);
 	    for (unsigned ggc = 0; ggc < num_children; ggc++)
 	    {
 		snprintf(names3[c][gc][ggc], sizeof(names3[c][gc][ggc]), "gen3:%u,%u,%u", c, gc, ggc);
 		gen3[c][gc][ggc] = mallocator_create_child(gen2[c][gc], names3[c][gc][ggc]);
 		assert_that(gen3[c][gc][ggc], is_non_null);
 		assert_that(gen3[c][gc][ggc], is_not_equal_to(gen2[c][gc]));
+		assert_that(mallocator_parent(gen3[c][gc][ggc]), is_equal_to(gen2[c][gc]));
+		mallocator_dereference(gen2[c][gc]);
 	    }
 	}
     }
@@ -181,13 +193,13 @@ Ensure(mallocator, can_create_multiple_generations)
 Ensure(mallocator, references_children)
 {
     unsigned num_generations = 4;
-    char names[num_generations - 1][8];
     mallocator_t *family[num_generations];
     family[0] = m;
     for (unsigned generation = 1; generation < num_generations; generation++)
     {
-	snprintf(names[generation], sizeof(names[generation]), "gen%u", generation);
-	family[generation] = mallocator_create_child(family[generation - 1], names[generation]);
+	char name[8];
+	snprintf(name, sizeof(name), "gen%u", generation);
+	family[generation] = mallocator_create_child(family[generation - 1], name);
 	assert_that(family[generation], is_non_null);
     }
     for (unsigned generation = 0; generation < num_generations - 1; generation++)
@@ -199,6 +211,17 @@ Ensure(mallocator, references_children)
     {
 	mallocator_dereference(family[generation]);
     }
+}
+
+Ensure(mallocator, references_dead_parents)
+{
+    mallocator_t *c = mallocator_create_child(m, "c");
+    mallocator_t *gc = mallocator_create_child(c, "gc");
+    mallocator_dereference(c);
+    /* c now has a reference count of 0 */
+    assert_that(mallocator_parent(gc), is_equal_to(c));
+    mallocator_dereference(c);
+    mallocator_dereference(gc);
 }
 
 static void check_names(void *obj, mallocator_t *mallocator)
@@ -281,6 +304,32 @@ Ensure(mallocator, references_iterated_children)
     {
 	mallocator_dereference(children[i]);
     }
+}
+
+Ensure(mallocator, can_destroy_siblings_during_iteration)
+{
+    mallocator_t *child1 = mallocator_create_child(m, "child1");
+    mallocator_t *child2 = mallocator_create_child(m, "child2");
+    mallocator_t *curr = mallocator_child_begin(m);
+    assert_that(curr, is_equal_to(child1));
+    mallocator_dereference(child2);
+    assert_that(mallocator_child_next(curr), is_null);
+    mallocator_dereference(child1);
+}
+
+Ensure(mallocator, can_destroy_siblings_during_iteration2)
+{
+    mallocator_t *child1 = mallocator_create_child(m, "child1");
+    mallocator_t *child2 = mallocator_create_child(m, "child2");
+    mallocator_t *child3 = mallocator_create_child(m, "child3");
+    mallocator_t *curr = mallocator_child_begin(m);
+    assert_that(curr, is_equal_to(child1));
+    curr = mallocator_child_next(curr);
+    assert_that(curr, is_equal_to(child2));
+    mallocator_dereference(child1);
+    mallocator_dereference(child3);
+    assert_that(mallocator_child_next(curr), is_null);
+    mallocator_dereference(child2);
 }
 
 Ensure(mallocator, children_are_uniquely_named)
@@ -424,8 +473,11 @@ TestSuite *mallocator_tests(void)
     add_test_with_context(suite, mallocator, can_create_children);
     add_test_with_context(suite, mallocator, can_create_multiple_generations);
     add_test_with_context(suite, mallocator, references_children);
+    add_test_with_context(suite, mallocator, references_dead_parents);
     add_test_with_context(suite, mallocator, iterates_children_in_order);
     add_test_with_context(suite, mallocator, can_lookup_children);
+    add_test_with_context(suite, mallocator, can_destroy_siblings_during_iteration);
+    add_test_with_context(suite, mallocator, can_destroy_siblings_during_iteration2);
     add_test_with_context(suite, mallocator, references_iterated_children);
     add_test_with_context(suite, mallocator, children_are_uniquely_named);
     add_test_with_context(suite, mallocator, can_malloc);

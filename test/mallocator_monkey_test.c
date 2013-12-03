@@ -34,16 +34,14 @@ static bool always_fail(void *arg)
 
 Ensure(mallocator_monkey, can_be_created)
 {
-    mallocator_impl_t *monkey = mallocator_monkey_create_custom(never_fail, NULL);
-    assert_that(monkey, is_non_null);
-    mallocator_t *m = mallocator_create_custom("test", monkey);
+    mallocator_t *m = mallocator_monkey_create_custom("test", never_fail, NULL);
     assert_that(m, is_non_null);
     mallocator_dereference(m);
 }
 
 Ensure(mallocator_monkey, has_a_name)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(never_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", never_fail, NULL);
     const char *name = mallocator_name(m);
     assert_that(name, is_equal_to_string("test"));
     mallocator_dereference(m);
@@ -51,7 +49,7 @@ Ensure(mallocator_monkey, has_a_name)
 
 Ensure(mallocator_monkey, can_malloc)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(never_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", never_fail, NULL);
     unsigned num = 1024;
     int *ints = mallocator_malloc(m, num * sizeof(int));
     assert_that(ints, is_non_null);
@@ -65,7 +63,7 @@ Ensure(mallocator_monkey, can_malloc)
 
 Ensure(mallocator_monkey, can_calloc)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(never_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", never_fail, NULL);
     unsigned num = 1024;
     int *ints = mallocator_calloc(m, num, sizeof(int));
     assert_that(ints, is_non_null);
@@ -80,7 +78,7 @@ Ensure(mallocator_monkey, can_calloc)
 
 Ensure(mallocator_monkey, can_realloc)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(never_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", never_fail, NULL);
     unsigned num = 1024;
     int *ints = mallocator_realloc(m, NULL, 0, num * sizeof(int));
     assert_that(ints, is_non_null);
@@ -103,7 +101,7 @@ Ensure(mallocator_monkey, can_realloc)
 
 Ensure(mallocator_monkey, can_fail_malloc)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(always_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", always_fail, NULL);
     unsigned num = 1024;
     int *ints = mallocator_malloc(m, num * sizeof(int));
     assert_that(ints, is_null);
@@ -112,7 +110,7 @@ Ensure(mallocator_monkey, can_fail_malloc)
 
 Ensure(mallocator_monkey, can_fail_calloc)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(always_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", always_fail, NULL);
     unsigned num = 1024;
     int *ints = mallocator_calloc(m, num, sizeof(int));
     assert_that(ints, is_null);
@@ -121,7 +119,7 @@ Ensure(mallocator_monkey, can_fail_calloc)
 
 Ensure(mallocator_monkey, can_fail_realloc)
 {
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_custom(always_fail, NULL));
+    mallocator_t *m = mallocator_monkey_create_custom("test", always_fail, NULL);
     unsigned num = 1024;
     int *ints = mallocator_realloc(m, NULL, 0, num * sizeof(int));
     assert_that(ints, is_null);
@@ -131,7 +129,7 @@ Ensure(mallocator_monkey, can_fail_realloc)
 Ensure(mallocator_monkey, can_step_malloc)
 {
     const unsigned num_success = 3, num_failure = 2;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_step(num_success, num_failure, false));
+    mallocator_t *m = mallocator_monkey_create_step("test", num_success, num_failure, false);
     unsigned num = 1024;
     for (unsigned i = 0; i < num_success; i++)
     {
@@ -156,7 +154,7 @@ Ensure(mallocator_monkey, can_step_malloc)
 Ensure(mallocator_monkey, can_step_calloc)
 {
     const unsigned num_success = 2, num_failure = 3;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_step(num_success, num_failure, false));
+    mallocator_t *m = mallocator_monkey_create_step("test", num_success, num_failure, false);
     unsigned num = 1024;
     for (unsigned i = 0; i < num_success; i++)
     {
@@ -181,7 +179,7 @@ Ensure(mallocator_monkey, can_step_calloc)
 Ensure(mallocator_monkey, can_step_realloc)
 {
     const unsigned num_success = 4, num_failure = 4;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_step(num_success, num_failure, false));
+    mallocator_t *m = mallocator_monkey_create_step("test", num_success, num_failure, false);
     unsigned num = 1024;
     int *ints = NULL;
     for (unsigned i = 0; i < num_success; i++)
@@ -207,7 +205,7 @@ Ensure(mallocator_monkey, can_step_realloc)
 Ensure(mallocator_monkey, can_step_repeat_malloc)
 {
     const unsigned num_success = 3, num_failure = 2;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_step(num_success, num_failure, true));
+    mallocator_t *m = mallocator_monkey_create_step("test", num_success, num_failure, true);
     unsigned num = 1024;
     for (unsigned repeat = 0; repeat < 3; repeat++)
     {
@@ -229,7 +227,7 @@ Ensure(mallocator_monkey, can_step_repeat_malloc)
 Ensure(mallocator_monkey, can_step_repeat_calloc)
 {
     const unsigned num_success = 2, num_failure = 3;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_step(num_success, num_failure, true));
+    mallocator_t *m = mallocator_monkey_create_step("test", num_success, num_failure, true);
     unsigned num = 1024;
     for (unsigned repeat = 0; repeat < 3; repeat++)
     {
@@ -251,7 +249,7 @@ Ensure(mallocator_monkey, can_step_repeat_calloc)
 Ensure(mallocator_monkey, can_step_repeat_realloc)
 {
     const unsigned num_success = 4, num_failure = 4;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_step(num_success, num_failure, true));
+    mallocator_t *m = mallocator_monkey_create_step("test", num_success, num_failure, true);
     unsigned num = 1024;
     int *ints = NULL;
     for (unsigned repeat = 0; repeat < 3; repeat++)
@@ -275,7 +273,7 @@ Ensure(mallocator_monkey, can_step_repeat_realloc)
 Ensure(mallocator_monkey, can_random_malloc)
 {
     const float p_fail = 0.1, p_success = 0.1;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_random(p_fail, p_success));
+    mallocator_t *m = mallocator_monkey_create_random("test", p_fail, p_success);
     unsigned num_success = 0;
     unsigned num = 1024;
     unsigned total = 1000;
@@ -296,7 +294,7 @@ Ensure(mallocator_monkey, can_random_malloc)
 Ensure(mallocator_monkey, can_random_calloc)
 {
     const float p_fail = 0.1, p_success = 0.2;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_random(p_fail, p_success));
+    mallocator_t *m = mallocator_monkey_create_random("test", p_fail, p_success);
     unsigned num_success = 0;
     unsigned num = 1024;
     unsigned total = 1000;
@@ -317,7 +315,7 @@ Ensure(mallocator_monkey, can_random_calloc)
 Ensure(mallocator_monkey, can_random_realloc)
 {
     const float p_fail = 0.3, p_success = 0.1;
-    mallocator_t *m = mallocator_create_custom("test", mallocator_monkey_create_random(p_fail, p_success));
+    mallocator_t *m = mallocator_monkey_create_random("test", p_fail, p_success);
     unsigned num_success = 0;
     unsigned num = 1024;
     unsigned total = 1000;

@@ -207,7 +207,7 @@ static void *thread(void *arg)
 Ensure(mallocator_concurrency, is_safe)
 {
     unsigned num_iterations = 1000;
-    unsigned num_threads = 8;
+    unsigned num_threads = 4;
     test_data_t data[num_threads];
     pthread_t threads[num_threads];
     mallocator_t *root = mallocator_create("root");
