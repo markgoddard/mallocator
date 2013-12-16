@@ -116,4 +116,25 @@ void *mallocator_realloc(mallocator_t *mallocator, void *ptr, size_t size, size_
  */
 void mallocator_free(mallocator_t *mallocator, void *ptr, size_t size);
 
+/**
+ * Leak reporter function.
+ * The function will be called during the destruction of a mallocator which has allocated more
+ * memory than it has freed.
+ * \note The function will be called from a sensitive context, so should not be blocked e.g. by
+ * attempting to acquire a lock.
+ */
+typedef void (*mallocator_leak_reporter_fn)(void *arg, const char *name, size_t blocks_leaked, size_t bytes_leaked);
+
+/**
+ * Set a leak reporter function for mallocator and all children.
+ * \note mallocator should be a root mallocator.
+ */
+void mallocator_set_leak_reporter(mallocator_t *mallocator, mallocator_leak_reporter_fn fn, void *arg);
+
+/**
+ * Clear a leak reporter function for mallocator and all children.
+ * \note mallocator should be a root mallocator.
+ */
+void mallocator_clear_leak_reporter(mallocator_t *mallocator);
+
 #endif // MALLOCATOR_H

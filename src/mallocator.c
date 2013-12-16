@@ -17,6 +17,8 @@ typedef struct
 {
     pthread_mutex_t lock;			/* Lock for tree synchronisation */
     mallocator_t *root;				/* Root mallocator object */
+    mallocator_leak_reporter_fn leak_fn;	/* Leak reporter function */
+    void *leak_arg;				/* Leak reporter function argument */
 } mallocator_tree_t;
 
 #ifdef MALLOCATOR_STATS_ATOMIC
@@ -96,6 +98,13 @@ static inline void mallocator_stats_get(mallocator_t *mallocator, mallocator_sta
     stats->bytes_failed = atomic_load(&mallocator->stats.bytes_failed);
 }
 
+static inline bool mallocator_stats_leak(mallocator_t *mallocator, size_t *blocks, size_t *bytes)
+{
+    *blocks = atomic_load(&mallocator->stats.blocks_allocated) - atomic_load(&mallocator->stats.blocks_freed);
+    *bytes = atomic_load(&mallocator->stats.bytes_allocated) - atomic_load(&mallocator->stats.bytes_freed);
+    return *blocks > 0 || *bytes > 0;
+}
+
 #else
 
 static void mallocator_stats_coll_init(mallocator_stats_coll_t *stats)
@@ -150,6 +159,15 @@ static inline void mallocator_stats_get(mallocator_t *mallocator, mallocator_sta
     mallocator_stats_unlock(mallocator);
 }
 
+static inline bool mallocator_stats_leak(mallocator_t *mallocator, size_t *blocks, size_t bytes)
+{
+    mallocator_stats_lock(mallocator);
+    *blocks = mallocator->stats.blocks_allocated - mallocator->stats.blocks_freed;
+    *bytes = mallocator->stats.bytes_allocated - mallocator->stats.bytes_freed;
+    mallocator_stats_unlock(mallocator);
+    return *blocks > 0 || *bytes > 0;
+}
+
 #endif
 
 /**************************************************************************************************/
@@ -161,6 +179,8 @@ static mallocator_tree_t *mallocator_tree_create(mallocator_t *root)
     if (!tree) return NULL;
     assert(pthread_mutex_init(&tree->lock, NULL) == 0);
     tree->root = root;
+    tree->leak_fn = NULL;
+    tree->leak_arg = NULL;
     return tree;
 }
 
@@ -168,6 +188,8 @@ static void mallocator_tree_destroy(mallocator_tree_t *tree)
 {
     assert(pthread_mutex_destroy(&tree->lock) == 0);
     tree->root = NULL;
+    tree->leak_fn = NULL;
+    tree->leak_arg = NULL;
     free(tree);
 }
 
@@ -333,10 +355,21 @@ static void mallocator_destroy(mallocator_t *mallocator)
     free(mallocator);
 }
 
+static void mallocator_report_leaks(mallocator_t *mallocator)
+{
+    if (!mallocator->tree->leak_fn) return;
+
+    size_t blocks_leaked, bytes_leaked;
+    if (!mallocator_stats_leak(mallocator, &blocks_leaked, &bytes_leaked)) return;
+
+    mallocator->tree->leak_fn(mallocator->tree->leak_arg, mallocator->name, blocks_leaked, bytes_leaked);
+}
+
 static mallocator_tree_t *mallocator_destroy_ancestors(mallocator_t *mallocator)
 {
     mallocator_tree_t *tree = mallocator->tree;
     mallocator_t *parent = mallocator->parent;
+    mallocator_report_leaks(mallocator);
     mallocator_destroy(mallocator);
 
     /* Root node - return the tree for destruction */
@@ -619,4 +652,24 @@ void mallocator_free(mallocator_t *mallocator, void *ptr, size_t size)
     }
 
     mallocator_stats_freed(mallocator, size);
+}
+
+void mallocator_set_leak_reporter(mallocator_t *mallocator, mallocator_leak_reporter_fn fn, void *arg)
+{
+    mallocator_verify(mallocator);
+    assert(!mallocator->parent);
+    mallocator_tree_lock(mallocator->tree);
+    mallocator->tree->leak_fn = fn;
+    mallocator->tree->leak_arg = arg;
+    mallocator_tree_unlock(mallocator->tree);
+}
+
+void mallocator_clear_leak_reporter(mallocator_t *mallocator)
+{
+    mallocator_verify(mallocator);
+    assert(!mallocator->parent);
+    mallocator_tree_lock(mallocator->tree);
+    mallocator->tree->leak_fn = NULL;
+    mallocator->tree->leak_arg = NULL;
+    mallocator_tree_unlock(mallocator->tree);
 }

@@ -3,6 +3,7 @@
 #include "mallocator.h"
 
 #include <malloc.h>
+#include <string.h>
 
 Describe(mallocator);
 
@@ -462,6 +463,79 @@ Ensure(mallocator, counts_realloc)
     }
 }
 
+typedef struct
+{
+    char *name;
+    size_t blocks_leaked;
+    size_t bytes_leaked;
+} test_leak_t;
+
+static void report_leak(void *arg, const char *name, size_t blocks_leaked, size_t bytes_leaked)
+{
+    test_leak_t *leak = arg;
+    leak->name = malloc(strlen(name) + 1);
+    strcpy(leak->name, name);
+    leak->blocks_leaked = blocks_leaked;
+    leak->bytes_leaked = bytes_leaked;
+}
+
+Ensure(mallocator, reports_malloc_leaks)
+{
+    /* Use a non-global mallocator so that we can destroy it. */
+    mallocator_t *m = mallocator_create("leaker");
+    assert_that(m, is_non_null);
+
+    test_leak_t leak = { .name = NULL, .blocks_leaked = 0, .bytes_leaked = 0 };
+    mallocator_set_leak_reporter(m, report_leak, &leak);
+    unsigned num = 1024;
+    void *ptr = mallocator_malloc(m, num * sizeof(int));
+    assert_that(ptr, is_non_null);
+    mallocator_dereference(m);
+    assert_that(leak.name, is_equal_to_string("leaker"));
+    assert_that(leak.blocks_leaked, is_equal_to(1));
+    assert_that(leak.bytes_leaked, is_equal_to(num * sizeof(int)));
+    free(leak.name);
+    free(ptr);
+}
+
+Ensure(mallocator, reports_calloc_leaks)
+{
+    /* Use a non-global mallocator so that we can destroy it. */
+    mallocator_t *m = mallocator_create("leaker");
+    assert_that(m, is_non_null);
+
+    test_leak_t leak = { .name = NULL, .blocks_leaked = 0, .bytes_leaked = 0 };
+    mallocator_set_leak_reporter(m, report_leak, &leak);
+    unsigned num = 1024;
+    void *ptr = mallocator_calloc(m, num, sizeof(int));
+    assert_that(ptr, is_non_null);
+    mallocator_dereference(m);
+    assert_that(leak.name, is_equal_to_string("leaker"));
+    assert_that(leak.blocks_leaked, is_equal_to(1));
+    assert_that(leak.bytes_leaked, is_equal_to(num * sizeof(int)));
+    free(leak.name);
+    free(ptr);
+}
+
+Ensure(mallocator, reports_realloc_leaks)
+{
+    /* Use a non-global mallocator so that we can destroy it. */
+    mallocator_t *m = mallocator_create("leaker");
+    assert_that(m, is_non_null);
+
+    test_leak_t leak = { .name = NULL, .blocks_leaked = 0, .bytes_leaked = 0 };
+    mallocator_set_leak_reporter(m, report_leak, &leak);
+    unsigned num = 1024;
+    void *ptr = mallocator_realloc(m, NULL, 0, num * sizeof(int));
+    assert_that(ptr, is_non_null);
+    mallocator_dereference(m);
+    assert_that(leak.name, is_equal_to_string("leaker"));
+    assert_that(leak.blocks_leaked, is_equal_to(1));
+    assert_that(leak.bytes_leaked, is_equal_to(num * sizeof(int)));
+    free(leak.name);
+    free(ptr);
+}
+
 TestSuite *mallocator_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -486,5 +560,8 @@ TestSuite *mallocator_tests(void)
     add_test_with_context(suite, mallocator, counts_malloc);
     add_test_with_context(suite, mallocator, counts_calloc);
     add_test_with_context(suite, mallocator, counts_realloc);
+    add_test_with_context(suite, mallocator, reports_malloc_leaks);
+    add_test_with_context(suite, mallocator, reports_calloc_leaks);
+    add_test_with_context(suite, mallocator, reports_realloc_leaks);
     return suite;
 }
